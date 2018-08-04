@@ -1,0 +1,8 @@
+gym
+torch
+torchvision
+numpy
+tensorflow
+tensorboardX
+Box2D-kengz
+PySide2
