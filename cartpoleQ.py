@@ -17,6 +17,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 
+from tensorboardX import SummaryWriter
+
 #plt.interactive(False)
 
 
@@ -30,6 +32,24 @@ env = gym.make('CartPole-v0').unwrapped
 #plt.ion()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+class SummaryWriterWithGlobal(SummaryWriter):
+    def __init__(self, comment):
+        super(SummaryWriterWithGlobal, self).__init__(comment=comment)
+        self.global_step = 0
+
+    def step(self):
+        self.global_step += 1
+
+    def scaler(self, name, scalar):
+        self.add_scalar(name, scalar, self.global_step)
+
+    """
+    Adds a matplotlib plot to tensorboard
+    """
+    def plotImage(self, plot):
+        self.add_image('Image', plot.getPlotAsTensor(), self.global_step)
+        plot.close()
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -50,6 +70,41 @@ class ReplayMemory(object):
 
     def __len__(self):
         return len(self.memory)
+
+
+class VAE(nn.Module):
+    def __init__(self, input_dims, z_dims):
+        super(VAE, self).__init__()
+
+        self.input_dims = input_dims
+
+        self.fc1 = nn.Linear(input_dims, 400)
+        self.fc21 = nn.Linear(400, z_dims)
+        self.fc22 = nn.Linear(400, z_dims)
+
+        self.fc3 = nn.Linear(z_dims, 400)
+        self.fc4 = nn.Linear(400, input_dims)
+
+    def encode(self, x):
+        h1 = F.relu(self.fc1(x))
+        return self.fc21(h1), self.fc22(h1)
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = torch.exp(0.5*logvar)
+            eps = torch.randn_like(std)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def decode(self, z):
+        h3 = F.relu(self.fc3(z))
+        return F.sigmoid(self.fc4(h3))
+
+    def forward(self, x):
+        mu, logvar = self.encode(x.view(-1, self.input_dims))
+        z = self.reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
 
 
 class DQN(nn.Module):
@@ -74,9 +129,9 @@ class DQN(nn.Module):
         x = x.view(x.size(0), -1)
         return self.head(x)
 
-class Eyes():
 
-    def __init__(self, env):
+class Eyes():
+    def __init__(self, env, vae):
         self.env = env
         self.resize = T.Compose([T.ToPILImage(),
                        T.Resize((32,48), interpolation=Image.CUBIC),
@@ -85,6 +140,7 @@ class Eyes():
                               T.ToTensor()])
         self.pilF = T.Compose([T.ToPILImage()])
         self.pipelineView = {}
+        self.vae = vae
 
     def registerObserver(self, tag, observer):
         if tag not in self.pipelineView:
@@ -147,6 +203,10 @@ class Eyes():
 
         self.updateObservers('input','tensorPIL', screen)
 
+        screen_recon, _, _ = self.vae(screen)
+
+        self.updateObservers('recon', 'tensorPIL', screen_recon.detach().view(1, 3, 32, 48))
+
         #move the tensor to the processing memory
         return screen.unsqueeze(0).to(device)
 
@@ -166,7 +226,16 @@ class OpenCV():
         self.C = None
         self.title = title
 
-    def setInputFormat(self, format):
+    def setInputFormat(self, screen, format):
+        if format is None:
+            # guess it based on the screen
+            if type(screen) == torch.Tensor:
+                format = 'tensorPIL'
+            elif type(screen) == np.ndarray:
+                format ='numpyRGB'
+            else:
+                raise Exception('failed to autodetect format please specify fromatß')
+
         if format == 'numpyRGB':
             self.C = lambda numpyRGB : cv2.cvtColor(numpyRGB, cv2.COLOR_RGB2BGR)
         elif format == 'tensorPIL':
@@ -174,9 +243,12 @@ class OpenCV():
         else:
             raise Exception(format + ' is not supported')
 
-    def update(self, screen, format):
+
+    def update(self, screen, format=None):
+
         if self.C is None:
-            self.setInputFormat(format)
+            self.setInputFormat(screen, format)
+
         frame = self.C(screen)
 
         # Display the resulting frame
@@ -209,15 +281,8 @@ class Plotter():
         plt.pause(0.001)
         #plt.draw()
 
-eye = Eyes(env)
-eye.registerObserver('raw', OpenCV('raw'))
-eye.registerObserver('input', OpenCV('input'))
-#eye.registerObserver("raw", Plotter(1))
-#eye.registerObserver('input', Plotter(3))
-
 env.reset()
 plt.figure()
-screen = eye.get_screen()
 
 BATCH_SIZE = 128
 GAMMA = 0.999
@@ -226,14 +291,29 @@ EPS_END = 0.05
 EPS_DECAY = 200
 TARGET_UPDATE = 10
 
+IMAGE_SIZE = 3 * 32 * 48
+
+tb = SummaryWriterWithGlobal('cartpole')
+
 policy_net = DQN().to(device)
 target_net = DQN().to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
+vae = VAE(IMAGE_SIZE, 10).to(device)
+vae_optim = optim.Adam(vae.parameters(), lr=1e-3)
+
 optimizer = optim.RMSprop(policy_net.parameters())
 memory = ReplayMemory(10000)
 
+
+eye = Eyes(env, vae)
+#eye.registerObserver('raw', OpenCV('raw'))
+eye.registerObserver('input', OpenCV('input'))
+eye.registerObserver('recon', OpenCV('recon'))
+debug_observer = OpenCV('debug')
+#eye.registerObserver("raw", Plotter(1))
+#eye.registerObserver('input', Plotter(3))
 
 steps_done = 0
 
@@ -267,6 +347,18 @@ def plot_durations():
 
     plt.pause(0.001)
 
+# Reconstruction + KL divergence losses summed over all elements and batch
+def vae_loss_function(recon_x, x, mu, logvar):
+    BCE = F.binary_cross_entropy_with_logits(recon_x, x.view(-1, IMAGE_SIZE))
+
+    # see Appendix B from VAE paper:
+    # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+    # https://arxiv.org/abs/1312.6114
+    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    tb.scaler('loss/KLD', KLD)
+    tb.scaler('loss/BCE', BCE)
+    return BCE + KLD
 
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -281,6 +373,17 @@ def optimize_model():
     state_batch  = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
+
+    #VAE
+    tb.step()
+    debug_observer.update(state_batch[1])
+    recon_x, mu, logvar = vae(state_batch)
+    loss = vae_loss_function(recon_x, state_batch, mu, logvar)
+    tb.scaler('vae_loss', loss)
+    vae_optim.zero_grad()
+    loss.backward()
+    vae_optim.step()
+
 
     #Compute Q(s_t, a)
     state_action_values = policy_net(state_batch).gather(1, action_batch)
@@ -302,12 +405,15 @@ def optimize_model():
         param.grad.data.clamp(-1, 1)
     optimizer.step()
 
+# main loop
+
 num_episodes = 5000
 for i_episode in range(num_episodes):
     env.reset()
     last_screen = eye.get_screen()
     current_screen = eye.get_screen()
-    state = current_screen - last_screen
+    #state = current_screen - last_screen\
+    state = current_screen
     for t in count():
         # select and perform action
         action = select_action(state)
@@ -319,7 +425,8 @@ for i_episode in range(num_episodes):
         last_screen = current_screen
         current_screen = eye.get_screen()
         if not done:
-            next_state = current_screen - last_screen
+            #next_state = current_screen - last_screen
+            next_state = current_screen
         else:
             next_state = None
 
