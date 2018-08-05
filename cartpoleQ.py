@@ -188,8 +188,8 @@ def vae_loss_function(recon_x, x, mu, logvar):
     # https://arxiv.org/abs/1312.6114
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    tb.scaler('loss/KLD', KLD)
-    tb.scaler('loss/BCE', BCE)
+    tb.tensorboard_scaler('loss/KLD', KLD)
+    tb.tensorboard_scaler('loss/BCE', BCE)
     return BCE + KLD
 
 def optimize_model():
@@ -207,11 +207,11 @@ def optimize_model():
     reward_batch = torch.cat(batch.reward)
 
     #VAE
-    tb.step()
+    tb.tensorboard_step()
     debug_observer.update(state_batch[1])
     recon_x, mu, logvar = vae(state_batch)
     loss = vae_loss_function(recon_x, state_batch, mu, logvar)
-    tb.scaler('vae_loss', loss)
+    tb.tensorboard_scaler('vae_loss', loss)
     vae_optim.zero_grad()
     loss.backward()
     vae_optim.step()
@@ -250,7 +250,7 @@ for i_episode in range(num_episodes):
         # select and perform action
         action = select_action(state)
         #print(action)
-        _ , reward, done, _ = env.step(action.item())
+        _ , reward, done, _ = env.tensorboard_step(action.item())
         reward = torch.tensor([reward], device=device)
 
         # Observe new state
@@ -271,7 +271,7 @@ for i_episode in range(num_episodes):
         optimize_model()
         if done:
             #episode_durations.append(t + 1)
-            tb.scaler('duration_till_done', t + 1)
+            tb.tensorboard_scaler('duration_till_done', t + 1)
             #plot_durations(t+1)
             break
 

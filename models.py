@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import monitors
 
-class VAE(nn.Module):
+class VAE(nn.Module, monitors.Controller):
     def __init__(self, input_dims, z_dims):
         super(VAE, self).__init__()
+        monitors.Controller.__init__(self)
 
         self.input_dims = input_dims
 
@@ -36,9 +38,29 @@ class VAE(nn.Module):
         return torch.sigmoid(self.fc4(h31))
 
     def forward(self, x):
+        input_shape = x.shape
+        self.updateObservers('input',x[0])
         mu, logvar = self.encode(x.view(-1, self.input_dims))
         z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
+        recon = self.decode(z)
+        recon = recon.view(input_shape)
+        self.updateObservers('recon',recon.detach()[0])
+        return recon, mu, logvar
+
+    @staticmethod
+    # Reconstruction + KL divergence losses summed over all elements and batch
+    def vae_loss_function(recon_x, x, mu, logvar, IMAGE_SIZE, tensorboard_summary_writer=None):
+        BCE = F.binary_cross_entropy_with_logits(recon_x, x)
+
+        # see Appendix B from VAE paper:
+        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        # https://arxiv.org/abs/1312.6114
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        if tensorboard_summary_writer:
+            tensorboard_summary_writer.tensorboard_scaler('loss/KLD', KLD)
+            tensorboard_summary_writer.tensorboard_scaler('loss/BCE', BCE)
+        return BCE + KLD
 
 
 class DQN(nn.Module):

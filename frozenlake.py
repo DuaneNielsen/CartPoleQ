@@ -25,7 +25,7 @@ for i in range(num_episodes):
 
         action = np.argmax(Q[state,:] + np.random.randn(1,env.action_space.n) * (1./(i+1)))
 
-        next_state, reward, done, _ = env.step(action)
+        next_state, reward, done, _ = env.tensorboard_step(action)
 
         Q[state,action] = Q[state,action] + lr * (reward + np.max(Q[next_state,:]) - Q[state,action])
         rAll += reward
@@ -39,7 +39,7 @@ state = env.reset()
 while not done:
     action = np.argmax(Q[state, :])
     print(action)
-    next_state, reward, done, _ = env.step(action)
+    next_state, reward, done, _ = env.tensorboard_step(action)
     env.render()
     time.sleep(0.2)
     state = next_state

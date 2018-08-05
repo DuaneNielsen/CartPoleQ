@@ -102,7 +102,7 @@ class ImageFileWriter(ImageObserver):
 
 
 class OpenCV(ImageObserver):
-    def __init__(self, title, screen_resolution=(640,480)):
+    def __init__(self, title='title', screen_resolution=(640,480)):
         super(OpenCV, self).__init__()
         self.C = None
         self.title = title
@@ -149,10 +149,10 @@ class SummaryWriterWithGlobal(SummaryWriter):
         super(SummaryWriterWithGlobal, self).__init__(comment=comment)
         self.global_step = 0
 
-    def step(self):
+    def tensorboard_step(self):
         self.global_step += 1
 
-    def scaler(self, name, scalar):
+    def tensorboard_scaler(self, name, scalar):
         self.add_scalar(name, scalar, self.global_step)
 
     """
