@@ -2,7 +2,8 @@ gym
 torch
 torchvision
 numpy
-tensorflow
 tensorboardX
 Box2D-kengz
-PySide2
+matplotlib
+pygame
+opencv-python

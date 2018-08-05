@@ -1,55 +1,23 @@
 import gym
 import math
 import random
-import numpy as np
-import matplotlib
-#matplotlib.use("Qt5agg")
 import matplotlib.pyplot as plt
 from collections import namedtuple
 from itertools import count
 from PIL import Image
-import matplotlib.image as mpimg
-import cv2
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
-
-from tensorboardX import SummaryWriter
-
-#plt.interactive(False)
+import models
+import monitors
+from monitors import OpenCV, ImageFileWriter, SummaryWriterWithGlobal
 
 
 env = gym.make('CartPole-v0').unwrapped
 
-# matplotlib
-#is_ipython = 'inline' in matplotlib.get_backend()
-#if is_ipython:
-#    from IPython import display
-
-#plt.ion()
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-class SummaryWriterWithGlobal(SummaryWriter):
-    def __init__(self, comment):
-        super(SummaryWriterWithGlobal, self).__init__(comment=comment)
-        self.global_step = 0
-
-    def step(self):
-        self.global_step += 1
-
-    def scaler(self, name, scalar):
-        self.add_scalar(name, scalar, self.global_step)
-
-    """
-    Adds a matplotlib plot to tensorboard
-    """
-    def plotImage(self, plot):
-        self.add_image('Image', plot.getPlotAsTensor(), self.global_step)
-        plot.close()
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -71,67 +39,9 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-
-class VAE(nn.Module):
-    def __init__(self, input_dims, z_dims):
-        super(VAE, self).__init__()
-
-        self.input_dims = input_dims
-
-        self.fc1 = nn.Linear(input_dims, 400)
-        self.fc21 = nn.Linear(400, z_dims)
-        self.fc22 = nn.Linear(400, z_dims)
-
-        self.fc3 = nn.Linear(z_dims, 400)
-        self.fc4 = nn.Linear(400, input_dims)
-
-    def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
-
-    def reparameterize(self, mu, logvar):
-        if self.training:
-            std = torch.exp(0.5*logvar)
-            eps = torch.randn_like(std)
-            return eps.mul(std).add_(mu)
-        else:
-            return mu
-
-    def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        return F.sigmoid(self.fc4(h3))
-
-    def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, self.input_dims))
-        z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
-
-
-class DQN(nn.Module):
-    def __init__(self):
-        super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(3,16, kernel_size=5, stride=2)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.head = nn.Linear(96, 2)
-
-    def screenToInput(self, screen):
-        return screen.permute(0,3,1,2)
-
-
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = x.view(x.size(0), -1)
-        return self.head(x)
-
-
-class Eyes():
+class Eyes(monitors.Controller):
     def __init__(self, env, vae):
+        super(Eyes, self).__init__()
         self.env = env
         self.resize = T.Compose([T.ToPILImage(),
                        T.Resize((32,48), interpolation=Image.CUBIC),
@@ -139,24 +49,7 @@ class Eyes():
         self.transF = T.Compose([T.ToPILImage(),
                               T.ToTensor()])
         self.pilF = T.Compose([T.ToPILImage()])
-        self.pipelineView = {}
         self.vae = vae
-
-    def registerObserver(self, tag, observer):
-        if tag not in self.pipelineView:
-            self.pipelineView[tag] = []
-        self.pipelineView[tag].append(observer)
-
-        return tag,len(self.pipelineView[tag]) -1
-
-    def unregisterObserver(self, id):
-        del self.pipelineView[id[0]][id[1]]
-
-    def updateObservers(self, tag, format, screen):
-        if tag not in self.pipelineView:
-            self.pipelineView[tag] = []
-        for observer in self.pipelineView[tag]:
-            observer.update(screen, format)
 
     def screen_width(self, screen):
         return screen.shape[2]
@@ -176,7 +69,7 @@ class Eyes():
     def get_screen(self):
         screen = self.env.render(mode='rgb_array')
 
-        self.updateObservers('raw','numpyRGB', screen)
+        self.updateObservers('raw',screen,'numpyRGB')
 
         screen = self.transF(screen)
 
@@ -199,13 +92,13 @@ class Eyes():
         right = cart_location + half_view_width
         screen = screen[:,:,left:right]
 
-        screen = self.resize(screen)
+        screen = self.resize(screen).to(device)
 
-        self.updateObservers('input','tensorPIL', screen)
+        self.updateObservers('input', screen, 'tensorPIL')
 
         screen_recon, _, _ = self.vae(screen)
 
-        self.updateObservers('recon', 'tensorPIL', screen_recon.detach().view(1, 3, 32, 48))
+        self.updateObservers('recon', screen_recon.detach().view(1, 3, 32, 48), 'tensorPIL')
 
         #move the tensor to the processing memory
         return screen.unsqueeze(0).to(device)
@@ -215,71 +108,6 @@ class Eyes():
         image = screen.squeeze().permute(1, 2, 0).numpy()
         self.showImage(image)
 
-
-tensorPILTonumpyRBG = lambda tensor : tensor.squeeze().permute(1, 2, 0).numpy()
-passthrough = lambda x : x
-
-
-
-class OpenCV():
-    def __init__(self, title):
-        self.C = None
-        self.title = title
-
-    def setInputFormat(self, screen, format):
-        if format is None:
-            # guess it based on the screen
-            if type(screen) == torch.Tensor:
-                format = 'tensorPIL'
-            elif type(screen) == np.ndarray:
-                format ='numpyRGB'
-            else:
-                raise Exception('failed to autodetect format please specify fromatß')
-
-        if format == 'numpyRGB':
-            self.C = lambda numpyRGB : cv2.cvtColor(numpyRGB, cv2.COLOR_RGB2BGR)
-        elif format == 'tensorPIL':
-            self.C = lambda tensor : cv2.cvtColor(tensorPILTonumpyRBG(tensor), cv2.COLOR_RGB2BGR)
-        else:
-            raise Exception(format + ' is not supported')
-
-
-    def update(self, screen, format=None):
-
-        if self.C is None:
-            self.setInputFormat(screen, format)
-
-        frame = self.C(screen)
-
-        # Display the resulting frame
-        cv2.imshow(self.title, frame)
-        cv2.waitKey(1)
-
-
-class Plotter():
-
-    def __init__(self, figure):
-        self.image = None
-        self.figure = figure
-        plt.ion()
-
-    def setInput(self, input):
-        if input == 'numpyRGB':
-            self.C = lambda x : x
-
-    def update(self, screen):
-
-        plt.figure(self.figure)
-
-        image = self.C(screen)
-
-        if self.image is None:
-            self.image = plt.imshow(image)
-        else:
-            self.image.set_array(image)
-
-        plt.pause(0.001)
-        #plt.draw()
 
 env.reset()
 plt.figure()
@@ -295,12 +123,12 @@ IMAGE_SIZE = 3 * 32 * 48
 
 tb = SummaryWriterWithGlobal('cartpole')
 
-policy_net = DQN().to(device)
-target_net = DQN().to(device)
+policy_net = models.DQN().to(device)
+target_net = models.DQN().to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
-vae = VAE(IMAGE_SIZE, 10).to(device)
+vae = models.VAE(IMAGE_SIZE, 10).to(device)
 vae_optim = optim.Adam(vae.parameters(), lr=1e-3)
 
 optimizer = optim.RMSprop(policy_net.parameters())
@@ -311,6 +139,7 @@ eye = Eyes(env, vae)
 #eye.registerObserver('raw', OpenCV('raw'))
 eye.registerObserver('input', OpenCV('input'))
 eye.registerObserver('recon', OpenCV('recon'))
+#eye.registerObserver('input', ImageFileWriter('cartpole','input'))
 debug_observer = OpenCV('debug')
 #eye.registerObserver("raw", Plotter(1))
 #eye.registerObserver('input', Plotter(3))
@@ -330,6 +159,9 @@ def select_action(state):
         return torch.tensor([[random.randrange(2)]], device=device, dtype = torch.long)
 
 episode_durations = []
+
+
+
 
 
 def plot_durations():
@@ -438,8 +270,9 @@ for i_episode in range(num_episodes):
         #perform one step of optimization on the target network
         optimize_model()
         if done:
-            episode_durations.append(t + 1)
-            plot_durations()
+            #episode_durations.append(t + 1)
+            tb.scaler('duration_till_done', t + 1)
+            #plot_durations(t+1)
             break
 
     #update the target network
