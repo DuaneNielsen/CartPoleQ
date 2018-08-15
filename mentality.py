@@ -5,8 +5,72 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from tensorboardX import SummaryWriter
+import os
+import pickle
+import errno
+from abc import abstractmethod, ABC
+import torch.nn.functional as F
+import torchvision.transforms as TVT
+import torchvision.transforms.functional as TVF
+
+"""
+ModelConfig is concerned with initializing, loading and saving the model and params
+"""
+
+class Storeable(ABC):
+    def __init__(self, *args):
+        self.params = args
+        self.type = type(self)
+        self.test_loss = None
+
+    @staticmethod
+    def fn(filename):
+        return 'data/models/' + filename + '_config.pt', 'data/models/' + filename + '_model.pt'
+
+    def buffer(self, model, test_loss):
+        self.state_dict = model.state_dict()
+        self.test_loss = test_loss
+
+    def save(self, filename):
+
+        try:
+            os.makedirs('data/models')
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+
+        config_filename, model_filename = Storeable.fn(filename)
+
+        with open(config_filename, 'wb') as output:  # Overwrites any existing file.
+            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
+        torch.save(self.state_dict(), model_filename)
+
+    #@abstractmethod
+    def get_model(self): #raise NotImplementedError
+        return self.type(*self.params)
+
+    #@abstractmethod
+    #def get_state_dict(self): raise NotImplementedError
+
+    @staticmethod
+    def file_exists(filename):
+        config_filename, model_filename = Storeable.fn(filename)
+        return os.path.isfile(config_filename)
+
+    @staticmethod
+    def load(filename):
+
+        config_filename, model_filename = Storeable.fn(filename)
+
+        with open(config_filename, 'rb') as input:
+            config = pickle.load(input)
+            model = config.get_model()
+            state_dict = torch.load(model_filename)
+            model.load_state_dict(state_dict)
+        return model
 
 tensorPILTonumpyRBG = lambda tensor : tensor.squeeze().permute(1, 2, 0).cpu().numpy()
+tensorGreyscaleTonumpyRGB = lambda tensor : tensor.expand(3,-1,-1).squeeze().permute(1, 2, 0).cpu().numpy()
 
 class BaseImageWrapper():
     def __init__(self, image, format=None):
@@ -18,9 +82,15 @@ class BaseImageWrapper():
     def guess_format(self, image):
             # guess it based on the screen
             if type(image) == torch.Tensor:
-                return 'tensorPIL'
+                if image.shape[0] == 3:
+                    return 'tensorPIL'
+                elif image.shape[0] == 1:
+                    return 'tensorGreyscale'
             elif type(image) == np.ndarray:
-                return 'numpyRGB'
+                if image.shape[0] == 3:
+                    return 'numpyRGB'
+                elif image.shape[0] == 1:
+                    return 'numpyGreyscale'
             else:
                 raise Exception('failed to autodetect format please specify format')
 
@@ -32,6 +102,12 @@ class NumpyRGBWrapper(BaseImageWrapper):
             self.numpyRGB = self.image
         elif self.format == 'tensorPIL':
             self.numpyRGB =  tensorPILTonumpyRBG(self.image)
+        elif self.format == 'tensorGreyscale':
+            TF = TVT.Compose([TVT.ToPILImage(),TVT.Grayscale(3),TVT.ToTensor()])
+            tensor_PIL = TF(image.cpu())
+            self.numpyRGB = tensorPILTonumpyRBG(tensor_PIL)
+        elif self.format == 'numpyGreyscale':
+            self.numpyRGB = np.repeat(image, 3, axis=0)
         else:
             raise Exception('conversion ' + self.format + ' to numpyRGB not implemented')
 
@@ -53,7 +129,7 @@ class TensorPILWrapper(BaseImageWrapper):
         return self.tensorPIL
 
 
-class Controller:
+class Observable:
     def __init__(self):
         self.pipelineView = {}
 
@@ -110,7 +186,8 @@ class OpenCV(ImageObserver):
 
     def update(self, screen, format=None):
 
-        frame = NumpyRGBWrapper(screen, format).getImage()
+        frame = NumpyRGBWrapper(screen, format)
+        frame = frame.getImage()
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         frame = cv2.resize(frame, self.screen_resolution)
 
@@ -161,3 +238,21 @@ class SummaryWriterWithGlobal(SummaryWriter):
     def plotImage(self, plot):
         self.add_image('Image', plot.getPlotAsTensor(), self.global_step)
         plot.close()
+
+class Lossable(ABC):
+    @abstractmethod
+    def loss(self):  raise NotImplementedError
+
+class BinaryCrossEntropy_KLD_Loss(Lossable):
+    # Reconstruction + KL divergence losses summed over all elements and batch
+    def loss(self, recon_x,mu, logvar, x):
+        BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
+
+        # see Appendix B from VAE paper:
+        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        # https://arxiv.org/abs/1312.6114
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+        return BCE + KLD
+

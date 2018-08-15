@@ -7,3 +7,4 @@ Box2D-kengz
 matplotlib
 pygame
 opencv-python
+tqdm

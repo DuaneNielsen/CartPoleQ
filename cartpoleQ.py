@@ -11,8 +11,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 import models
-import monitors
-from monitors import OpenCV, ImageFileWriter, SummaryWriterWithGlobal
+import mentality
+from mentality import OpenCV, ImageFileWriter, SummaryWriterWithGlobal
 
 
 env = gym.make('CartPole-v0').unwrapped
@@ -39,7 +39,7 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-class Eyes(monitors.Controller):
+class Eyes(mentality.Observable):
     def __init__(self, env, vae):
         super(Eyes, self).__init__()
         self.env = env
@@ -79,18 +79,18 @@ class Eyes(monitors.Controller):
         #drawPILTensor(screen)
 
         #center the a smaller view around the cart
-        cart_location = self.get_cart_location(screen)
-        view_width = 320
-        half_view_width = view_width // 2
+        #cart_location = self.get_cart_location(screen)
+        #view_width = 320
+        #half_view_width = view_width // 2
 
         #fill the left and right edges of the screen with black space
-        screen = self.fill_screen(screen, view_width)
-        cart_location = cart_location + half_view_width
+        #screen = self.fill_screen(screen, view_width)
+        #cart_location = cart_location + half_view_width
 
         #take a slice around the cart
-        left = cart_location - half_view_width
-        right = cart_location + half_view_width
-        screen = screen[:,:,left:right]
+        #left = cart_location - half_view_width
+        #right = cart_location + half_view_width
+        #screen = screen[:,:,left:right]
 
         screen = self.resize(screen).to(device)
 
@@ -128,7 +128,7 @@ target_net = models.DQN().to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
-vae = models.VAE(IMAGE_SIZE, 10).to(device)
+vae = models.ThreeLayerLinearVAE(IMAGE_SIZE, 10).to(device)
 vae_optim = optim.Adam(vae.parameters(), lr=1e-3)
 
 optimizer = optim.RMSprop(policy_net.parameters())
@@ -139,7 +139,7 @@ eye = Eyes(env, vae)
 #eye.registerObserver('raw', OpenCV('raw'))
 eye.registerObserver('input', OpenCV('input'))
 eye.registerObserver('recon', OpenCV('recon'))
-#eye.registerObserver('input', ImageFileWriter('cartpole','input'))
+eye.registerObserver('input', ImageFileWriter('fullscreen','input'))
 debug_observer = OpenCV('debug')
 #eye.registerObserver("raw", Plotter(1))
 #eye.registerObserver('input', Plotter(3))
@@ -181,7 +181,7 @@ def plot_durations():
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def vae_loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy_with_logits(recon_x, x.view(-1, IMAGE_SIZE))
+    BCE = F.binary_cross_entropy_with_logits(recon_x, x)
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -250,7 +250,7 @@ for i_episode in range(num_episodes):
         # select and perform action
         action = select_action(state)
         #print(action)
-        _ , reward, done, _ = env.tensorboard_step(action.item())
+        _ , reward, done, _ = env.step(action.item())
         reward = torch.tensor([reward], device=device)
 
         # Observe new state
