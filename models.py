@@ -1,15 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mentality import Observable, Storeable, BinaryCrossEntropy_KLD_Loss
+from mentality import Observable, Storeable, BceKldLoss, BcelKldLoss
 
 
-class VAE(nn.Module, Observable, Storeable, BinaryCrossEntropy_KLD_Loss):
+class VAE(nn.Module, Observable, Storeable, BceKldLoss):
     def __init__(self):
         nn.Module.__init__(self)
         Observable.__init__(self)
         Storeable.__init__(self)
-        BinaryCrossEntropy_KLD_Loss.__init__(self)
+        BceKldLoss.__init__(self)
 
         self.fc1 = nn.Linear(784, 400)
         self.fc21 = nn.Linear(400, 20)
@@ -48,12 +48,14 @@ class VAE(nn.Module, Observable, Storeable, BinaryCrossEntropy_KLD_Loss):
         output = recon[0].data
         self.updateObservers('output', output,'tensorGreyscale')
         return recon, mu, logvar
-
-class ThreeLayerLinearVAE(nn.Module, Observable, Storeable):
+"""
+Autoncodes RBG images at 36 * 48
+"""
+class ThreeLayerLinearVAE(nn.Module, Observable, Storeable, BceKldLoss):
     def __init__(self, input_dims, z_dims):
         nn.Module.__init__(self)
         Observable.__init__(self)
-        Storeable.__init__(self)
+        Storeable.__init__(self, input_dims, z_dims)
 
         self.input_dims = input_dims
 
@@ -65,8 +67,6 @@ class ThreeLayerLinearVAE(nn.Module, Observable, Storeable):
         self.fc3 = nn.Linear(z_dims, 400)
         self.fc31 = nn.Linear(400,400)
         self.fc4 = nn.Linear(400, input_dims)
-
-        self.loss_function = self.vae_loss_function
 
     def encode(self, x):
         h1 = F.relu(self.fc1(x))
@@ -96,28 +96,12 @@ class ThreeLayerLinearVAE(nn.Module, Observable, Storeable):
         self.updateObservers('output',recon.data[0])
         return recon, mu, logvar
 
-    @staticmethod
-    # Reconstruction + KL divergence losses summed over all elements and batch
-    def vae_loss_function(recon_x, mu, logvar, x):
-        BCE = F.binary_cross_entropy_with_logits(recon_x, x)
 
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return BCE + KLD
-
-class ConvVAE(nn.Module, Observable, Storeable):
+class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
     def __init__(self, input_dims, z_dims):
         nn.Module.__init__(self)
         Observable.__init__(self)
-        Storeable.__init__(self)
-
-        self.params['input_dims'] = input_dims
-        self.params['z_dims'] = z_dims
-        self.input_dims = input_dims
+        Storeable.__init__(self, input_dims, z_dims)
 
         # encoder
         self.e_conv1 = nn.Conv2d(3,32, kernel_size=5, stride=2)
@@ -138,13 +122,6 @@ class ConvVAE(nn.Module, Observable, Storeable):
         self.d_bn2 = nn.BatchNorm2d(32)
 
         self.d_conv3 = nn.ConvTranspose2d(32, 3, kernel_size=5, stride=2, output_padding=1)
-        self.loss_function = self.vae_loss_function
-
-    def get_model(self, params):
-        return ConvVAE(params['input_dims'], params['z_dims'])
-
-    def get_state_dict(self):
-        return self.state_dict()
 
     def encode(self, x):
         encoded = F.relu(self.e_bn1(self.e_conv1(x)))
@@ -177,21 +154,8 @@ class ConvVAE(nn.Module, Observable, Storeable):
         recon = self.decode(z)
         recon = recon.view(input_shape)
 
-        self.updateObservers('output',recon.detach()[0])
+        self.updateObservers('output',recon.data[0])
         return recon, mu, logvar
-
-    @staticmethod
-    # Reconstruction + KL divergence losses summed over all elements and batch
-    def vae_loss_function(recon_x, mu, logvar, x):
-        BCE = F.binary_cross_entropy_with_logits(recon_x, x)
-
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return BCE + KLD
 
 class DQN(nn.Module):
     def __init__(self):

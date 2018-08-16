@@ -5,10 +5,12 @@ import mentality
 from tqdm import tqdm
 import torch.nn as nn
 import torchvision.transforms as TVT
+import torch.utils.data as du
 
 class Train(mentality.SummaryWriterWithGlobal):
-    def __init__(self, model, save_name=None):
-        mentality.SummaryWriterWithGlobal.__init__(self, 'cartpole')
+    def __init__(self, model, device, save_name=None):
+        run_name = save_name if save_name: else 'default'
+        mentality.SummaryWriterWithGlobal.__init__(self, run_name)
         self.model = model
 
         if issubclass(type(self.model), mentality.Storeable) and save_name:
@@ -19,66 +21,13 @@ class Train(mentality.SummaryWriterWithGlobal):
             self.model.registerObserver('input', mentality.OpenCV('input'))
             self.model.registerObserver('output', mentality.OpenCV('output'))
 
-        self.model = self.model.cuda()
+        self.model = self.model.to(device)
         self.save_name = save_name
-
-    def loader(self, dataset, batch_size):
-        loader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=batch_size,
-            num_workers=0,
-            shuffle=True
-        )
-        return loader
-
-    def train(self, dataset, batch_size, optimizer, epochs=1):
-        self.model.train()
-        train_loader = self.loader(dataset, batch_size)
-        for epoch in tqdm(range(epochs)):
-            for batch_idx, (data, target) in enumerate(train_loader):
-                self.tensorboard_step()
-                data = data.cuda()
-                optimizer.zero_grad()
-                output = self.model(data)
-                if type(output) == tuple:
-                    loss = self.model.loss(*output, data)
-                else:
-                    loss = self.model.loss(output, data)
-                self.tensorboard_scaler('loss/loss', loss/data.shape[0])
-                loss.backward()
-                optimizer.step()
-                if issubclass(type(self.model), models.Storeable) and self.save_name:
-                    self.model.save(self.save_name)
-
-    def test(self, dataset, batch_size, epochs=10):
-        self.model.eval()
-        test_loader = self.loader(dataset, batch_size)
-        for epoch in tqdm(range(epochs)):
-            for batch_idx, (data, target) in enumerate(test_loader):
-                self.tensorboard_step()
-                data = data.cuda()
-                output = self.model(data)
-                if type(output) == tuple:
-                    loss = self.model.loss(*output, data)
-                else:
-                    loss = self.model.loss(output, data)
-                self.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
+        self.model.apply(self.weights_init)
+        self.device = device
 
 
-if __name__ == '__main__':
-
-    def load_dataset(data_path):
-        dataset = torchvision.datasets.ImageFolder(
-            root=data_path,
-            transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
-        )
-        return dataset
-
-    mnist = torchvision.datasets.MNIST('../data', train=True, download=True,
-                   transform=TVT.Compose([TVT.Resize((32,48)),TVT.Grayscale(3),TVT.ToTensor()]))
-
-    cartpole_fullscreen = load_dataset('fullscreen/')
-
+    @staticmethod
     # custom weights initialization called on netG and netD
     def weights_init(m):
         if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d or type(m) == nn.Linear:
@@ -86,18 +35,82 @@ if __name__ == '__main__':
             m.bias.data.fill_(0.01)
 
 
+    def loader(self, dataset, batch_size):
+        loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            num_workers=0,
+            shuffle=True,
+            pin_memory=True
+        )
+        return loader
+
+    def train(self, dataset, batch_size):
+        self.model.train()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        train_set = du.Subset(dataset, range(len(dataset) // 5, len(dataset) -1))
+        train_loader = self.loader(train_set, batch_size)
+        for batch_idx, (data, target) in enumerate(train_loader):
+            data = data.to(self.device)
+            self.tensorboard_step()
+            optimizer.zero_grad()
+            output = self.model(data)
+            if type(output) == tuple:
+                loss = self.model.loss(*output, data)
+            else:
+                loss = self.model.loss(output, data)
+            self.tensorboard_scaler('loss/loss', loss/data.shape[0])
+            loss.backward()
+            optimizer.step()
+            if issubclass(type(self.model), models.Storeable) and self.save_name:
+                self.model.save(self.save_name)
+
+    def test(self, dataset, batch_size):
+        self.model.eval()
+        test_set = du.Subset(dataset, range(0,len(dataset)//5))
+        test_loader = self.loader(test_set, batch_size)
+        for batch_idx, (data, target) in enumerate(test_loader):
+            data = data.to(self.device)
+            self.tensorboard_step()
+            output = self.model(data)
+            if type(output) == tuple:
+                loss = self.model.loss(*output, data)
+            else:
+                loss = self.model.loss(output, data)
+            self.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
+
+    def train_test(self, dataset, batch_size, epochs):
+        for _ in tqdm(range(epochs)):
+            self.train(dataset, batch_size)
+            self.test(dataset, batch_size)
+
+
+if __name__ == '__main__':
+
+    cartpole_grescale_28_28 = torchvision.datasets.ImageFolder(
+            root='fullscreen/',
+            transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
+        )
+
+    cartpole_rgb_32_48 = torchvision.datasets.ImageFolder(
+            root='fullscreen/',
+            transform=TVT.Compose([TVT.ToTensor()])
+        )
+
+
+    mnist_rgb_32_48 = torchvision.datasets.MNIST('../data', train=True, download=True,
+                   transform=TVT.Compose([TVT.Resize((32,48)),TVT.Grayscale(3),TVT.ToTensor()]))
+
 
     INPUT_DIMS = 3 * 32 * 48
     Z_DIMS = 32
+    device = torch.device("cuda")
 
-    model = models.VAE()
-    #linear = Linear(INPUT_DIMS)
-    #model = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
-    #model = models.ConvVAE(INPUT_DIMS,Z_DIMS)
-    model.apply(weights_init)
-    adam = torch.optim.Adam(model.parameters(), lr=1e-3)
+    vae = models.VAE()
+    three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
+    conv = models.ConvVAE(INPUT_DIMS,Z_DIMS)
 
 
-    trainer = Train(model, save_name='delete_me')
-    trainer.train(dataset=cartpole_fullscreen, batch_size=2500, optimizer=adam, epochs=600)
-    trainer.test(dataset=cartpole_fullscreen, batch_size=2500, epochs=5)
+    #trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
+    trainer = Train(conv, device, save_name='conv_run1_cart')
+    trainer.train_test(dataset=cartpole_rgb_32_48, batch_size=2400, epochs=600)
