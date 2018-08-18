@@ -97,6 +97,11 @@ class Train(mentality.SummaryWriterWithGlobal):
 
 if __name__ == '__main__':
 
+    cartpole_rgb_400_600 = torchvision.datasets.ImageFolder(
+            root='data/images/',
+            transform=TVT.Compose([TVT.ToTensor()])
+        )
+
     cartpole_grescale_28_28 = torchvision.datasets.ImageFolder(
             root='fullscreen/',
             transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
@@ -122,6 +127,6 @@ if __name__ == '__main__':
 
 
     #trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
-    trainer = Train(conv, device, save_name='conv_run1_cart')
-    trainer.train_test(dataset=cartpole_rgb_32_48, batch_size=2400, epochs=600)
+    trainer = Train(conv, device, save_name='conv_run2_cart')
+    trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=16, epochs=600)
     #trainer.retest(dataset=cartpole_rgb_32_48, batch_size=2400, epochs=10)

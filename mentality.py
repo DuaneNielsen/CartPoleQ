@@ -12,6 +12,7 @@ from abc import abstractmethod, ABC
 import torch.nn.functional as F
 import torchvision.transforms as TVT
 import torchvision.transforms.functional as TVF
+from PIL import Image
 
 """
 ModelConfig is concerned with initializing, loading and saving the model and params
@@ -87,6 +88,8 @@ class BaseImageWrapper():
                     return 'numpyRGB'
                 elif image.shape[0] == 1:
                     return 'numpyGreyscale'
+                elif image.shape[2] == 3:
+                    return 'numpyRGB3'
             else:
                 raise Exception('failed to autodetect format please specify format')
 
@@ -111,15 +114,22 @@ class NumpyRGBWrapper(BaseImageWrapper):
         return self.numpyRGB
 
 class TensorPILWrapper(BaseImageWrapper):
-    def __init__(self):
-        super(TensorPILWrapper, self).__init__()
+    def __init__(self, image, format=None):
+        BaseImageWrapper.__init__(self, image, format)
         self.tensorPIL = None
         if self.format == 'tensorPIL':
             self.tensorPIL = self.image
-        #if self.format == 'numpyRGB':
-            #self.tensorPIL =  tensorPILTonumpyRBG(self.image)
+        elif self.format == 'numpyRGB':
+            # I don't think this works..
+            self.tensorPIL =  tensorPILTonumpyRBG(self.image)
+        elif self.format == 'numpyRGB3':
+            frame = image.transpose(2, 0, 1)
+            frame = np.flip(frame, axis=0)
+            frame = np.copy(frame)
+            TF = TVT.Compose([TVT.ToPILImage(),TVT.ToTensor])
+            self.tensorPIL = torch.from_numpy(frame)
         else:
-            raise Exception('conversion ' + self.format + ' to tensorPIL not implemented')
+            raise Exception('conversion ' + str(self.format) + ' to tensorPIL not implemented')
 
     def getImage(self):
         return self.tensorPIL
@@ -150,6 +160,7 @@ class ImageObserver():
         pass
 
 
+
 class ImageFileWriter(ImageObserver):
     def __init__(self, directory, prefix):
         super(ImageFileWriter, self).__init__()
@@ -158,19 +169,24 @@ class ImageFileWriter(ImageObserver):
         self.prefix = prefix
 
     def update(self, screen, in_format=None):
-        if in_format is None:
-            format = self.guess_format(in_format)
-        else:
-            format = in_format
 
-        if format == 'tensorPIL':
-            self.writer = lambda tensor, filename,  : torchvision.utils.save_image(tensor, filename)
-        else:
-            raise Exception(format + 'not supported yet')
+        frame = NumpyRGBWrapper(screen, in_format).numpyRGB
+        number = str(random.randint(1, 10000))
+        image = Image.fromarray(frame).save(self.directory + '/' + self.prefix + number + '.png')
 
-        number = str(random.randint(1,10000))
+        # if in_format is None:
+        #     format = self.guess_format(in_format)
+        # else:
+        #     format = in_format
+        #
+        # if format == 'tensorPIL':
+        #     self.writer = lambda tensor, filename,  : torchvision.utils.save_image(tensor, filename)
+        # else:
+        #     raise Exception(format + 'not supported yet')
 
-        self.writer(screen, self.directory + '/' + self.prefix + number + '.png')
+
+
+        #torchvision.utils.save_image(frame, )
 
 
 class OpenCV(ImageObserver):

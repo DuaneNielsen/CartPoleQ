@@ -131,6 +131,9 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
         Observable.__init__(self)
         Storeable.__init__(self, input_dims, z_dims)
 
+        # batchnorm in autoeconding is a thing
+        # https://arxiv.org/pdf/1602.02282.pdf
+
         # encoder
         self.e_conv1 = nn.Conv2d(3,32, kernel_size=5, stride=2)
         self.e_bn1 = nn.BatchNorm2d(32)
