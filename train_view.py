@@ -9,23 +9,29 @@ import torch.utils.data as du
 
 class Train(mentality.SummaryWriterWithGlobal):
     def __init__(self, model, device, save_name=None):
-        run_name = save_name if save_name: else 'default'
+        run_name = save_name if save_name else 'default'
         mentality.SummaryWriterWithGlobal.__init__(self, run_name)
-        self.model = model
 
-        if issubclass(type(self.model), mentality.Storeable) and save_name:
+        if issubclass(type(model), mentality.Storeable) and save_name:
             if mentality.Storeable.file_exists(save_name):
                 self.model = mentality.Storeable.load(save_name)
+        else:
+            self.model = model
+            self.model.apply(self.weights_init)
 
-        if issubclass(type(self.model), mentality.Observable):
-            self.model.registerObserver('input', mentality.OpenCV('input'))
-            self.model.registerObserver('output', mentality.OpenCV('output'))
+
+        self.registerObserver('input', mentality.OpenCV('input'))
+        self.registerObserver('output', mentality.OpenCV('output'))
 
         self.model = self.model.to(device)
         self.save_name = save_name
-        self.model.apply(self.weights_init)
+
         self.device = device
 
+
+    def registerObserver(self, tag, view):
+        if issubclass(type(self.model), mentality.Observable):
+            self.model.registerObserver(tag, view)
 
     @staticmethod
     # custom weights initialization called on netG and netD
@@ -84,6 +90,10 @@ class Train(mentality.SummaryWriterWithGlobal):
             self.train(dataset, batch_size)
             self.test(dataset, batch_size)
 
+    def retest(self, dataset, batch_size, epochs):
+        for _ in tqdm(range(epochs)):
+            self.test(dataset, batch_size)
+
 
 if __name__ == '__main__':
 
@@ -114,3 +124,4 @@ if __name__ == '__main__':
     #trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
     trainer = Train(conv, device, save_name='conv_run1_cart')
     trainer.train_test(dataset=cartpole_rgb_32_48, batch_size=2400, epochs=600)
+    #trainer.retest(dataset=cartpole_rgb_32_48, batch_size=2400, epochs=10)
