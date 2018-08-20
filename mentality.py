@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import torchvision.transforms as TVT
 import torchvision.transforms.functional as TVF
 from PIL import Image
+import imageio
 
 """
 ModelConfig is concerned with initializing, loading and saving the model and params
@@ -107,6 +108,8 @@ class NumpyRGBWrapper(BaseImageWrapper):
             self.numpyRGB = tensorPILTonumpyRBG(tensor_PIL)
         elif self.format == 'numpyGreyscale':
             self.numpyRGB = np.repeat(image, 3, axis=0)
+        elif self.format == 'numpyRGB3':
+            self.numpyRGB = np.transpose(image, [2,0,1])
         else:
             raise Exception('conversion ' + self.format + ' to numpyRGB not implemented')
 
@@ -155,13 +158,48 @@ class Observable:
         for observer in self.pipelineView[tag]:
             observer.update(screen, format)
 
-class ImageObserver():
+    """
+    sends a close event to all observers
+    used to close video files or save at the end of rollouts
+    """
+    def endObserverSession(self):
+        for tag in self.pipelineView:
+            for observer in self.pipelineView[tag]:
+                observer.endSession()
+
+
+
+
+class View():
     def __init__(self):
         pass
 
+    def endSession(self):
+        pass
+
+class ImageVideoWriter(View):
+    def __init__(self, directory, prefix):
+        self.directory = directory
+        self.prefix = prefix
+        self.number = 0
+        self.writer = None
 
 
-class ImageFileWriter(ImageObserver):
+    def update(self, screen, in_format=None):
+        if not self.writer:
+            self.number += 1
+            file = self.directory + self.prefix + str(self.number) + '.mp4'
+            self.writer = imageio.get_writer(file, macro_block_size=None)
+
+        frame = NumpyRGBWrapper(screen, in_format).numpyRGB
+        self.writer.append_data(frame)
+
+    def endSession(self):
+        self.writer.close()
+        self.writer = None
+
+
+class ImageFileWriter(View):
     def __init__(self, directory, prefix):
         super(ImageFileWriter, self).__init__()
         self.writer = None
@@ -172,24 +210,11 @@ class ImageFileWriter(ImageObserver):
 
         frame = NumpyRGBWrapper(screen, in_format).numpyRGB
         number = str(random.randint(1, 10000))
-        image = Image.fromarray(frame).save(self.directory + '/' + self.prefix + number + '.png')
-
-        # if in_format is None:
-        #     format = self.guess_format(in_format)
-        # else:
-        #     format = in_format
-        #
-        # if format == 'tensorPIL':
-        #     self.writer = lambda tensor, filename,  : torchvision.utils.save_image(tensor, filename)
-        # else:
-        #     raise Exception(format + 'not supported yet')
+        Image.fromarray(frame).save(self.directory + '/' + self.prefix + number + '.png')
 
 
 
-        #torchvision.utils.save_image(frame, )
-
-
-class OpenCV(ImageObserver):
+class OpenCV(View):
     def __init__(self, title='title', screen_resolution=(640,480)):
         super(OpenCV, self).__init__()
         self.C = None

@@ -12,11 +12,12 @@ class Train(mentality.SummaryWriterWithGlobal):
         run_name = save_name if save_name else 'default'
         mentality.SummaryWriterWithGlobal.__init__(self, run_name)
 
+        self.model = model
+
         if issubclass(type(model), mentality.Storeable) and save_name:
             if mentality.Storeable.file_exists(save_name):
                 self.model = mentality.Storeable.load(save_name)
         else:
-            self.model = model
             self.model.apply(self.weights_init)
 
 
@@ -96,6 +97,9 @@ class Train(mentality.SummaryWriterWithGlobal):
 
 
 if __name__ == '__main__':
+
+
+
 
     cartpole_rgb_400_600 = torchvision.datasets.ImageFolder(
             root='data/images/',
