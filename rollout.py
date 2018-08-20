@@ -68,7 +68,7 @@ class ActionEncoder(View):
     def update(self, screen_action, format):
         x = tvf.to_tensor(screen_action[0].copy()).unsqueeze(0).to(self.device)
         mu, logsigma = self.model.encode(x)
-        a = self.action_embedding.toTensor(screen_action[1])
+        a = self.action_embedding.toTensor(screen_action[1]).unsqueeze(0)
         self.z_list.append(mu)
         self.a_list.append(a)
 
@@ -91,8 +91,8 @@ if __name__ == '__main__':
     env = gym.make('CartPole-v0')
     random_policy = RandomPolicy(env)
     rollout = Rollout(env)
-    rollout.registerObserver('input', OpenCV('input'))
-    rollout.registerObserver('input', ImageVideoWriter('data/video/cart/','cartpole'))
+    #rollout.registerObserver('input', OpenCV('input'))
+    #rollout.registerObserver('input', ImageVideoWriter('data/video/cart/','cartpole'))
     cvae = models.ConvVAE.load('conv_run2_cart')
     ae = ActionEncoder(cvae, env, 'run').to(device)
     rollout.registerObserver('screen_action', ae)

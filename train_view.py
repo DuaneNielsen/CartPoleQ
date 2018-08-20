@@ -132,5 +132,5 @@ if __name__ == '__main__':
 
     #trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
     trainer = Train(conv, device, save_name='conv_run2_cart')
-    trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=16, epochs=600)
-    #trainer.retest(dataset=cartpole_rgb_32_48, batch_size=2400, epochs=10)
+    #trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=16, epochs=600)
+    trainer.retest(dataset=cartpole_rgb_400_600, batch_size=16, epochs=10)

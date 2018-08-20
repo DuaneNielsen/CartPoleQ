@@ -170,10 +170,12 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
         else:
             return mu
 
-    def decode(self, z):
+    def decode(self, z, shape=None):
         decoded = F.relu(self.d_bn1(self.d_conv1(z)))
         decoded = F.relu(self.d_bn2(self.d_conv2(decoded)))
         h2 = self.d_conv3(decoded)
+        h2 = h2.view(shape)
+        self.updateObservers('output',h2.data[0])
         return h2
 
     def forward(self, x):
@@ -182,10 +184,7 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
 
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        recon = self.decode(z)
-        recon = recon.view(input_shape)
-
-        self.updateObservers('output',recon.data[0])
+        recon = self.decode(z, input_shape)
         return recon, mu, logvar
 
 class DQN(nn.Module):
