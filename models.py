@@ -6,7 +6,7 @@ from mentality import Observable, Storeable, Lossable
 class BceKldLoss(Lossable):
     # Reconstruction + KL divergence losses summed over all elements and batch
     def loss(self, recon_x, mu, logvar, x):
-        BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
+        BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -181,11 +181,105 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
     def forward(self, x):
         input_shape = x.shape
         self.updateObservers('input',x[0])
-
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         recon = self.decode(z, input_shape)
         return recon, mu, logvar
+
+class BaseVAE(nn.Module, Observable, Storeable):
+    def __init__(self, input_shape, encoder, decoder):
+        nn.Module.__init__(self)
+        Observable.__init__(self)
+
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, x):
+        input_shape = x.shape
+        self.updateObservers('input',x[0])
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        recon = self.decode(z, input_shape)
+        return recon, mu, logvar
+
+    def encode(self, x):
+        mean, logvar = self.encoder(x)
+        return mean, logvar
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = torch.exp(0.5*logvar)
+            eps = torch.randn_like(std)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def decode(self, z, shape=None):
+        decoded = self.decoder(z)
+        decoded = decoded.view(shape)
+        self.updateObservers('output',decoded.data[0])
+        return decoded
+
+"""
+input_shape is a tuple of (height,width)
+"""
+class ConvVAEFixed(BaseVAE, Storeable, BcelKldLoss):
+    def __init__(self, input_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
+        self.input_shape = input_shape
+        encoder = self.Encoder(input_shape, first_kernel, first_stride, second_kernel, second_stride)
+        decoder = self.Decoder(encoder.z_shape, first_kernel, first_stride, second_kernel, second_stride)
+        BaseVAE.__init__(self, input_shape, encoder, decoder)
+        Storeable.__init__(self, input_shape, first_kernel, first_stride, second_kernel, second_stride)
+
+
+    class Encoder(nn.Module):
+        def __init__(self, input_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
+            nn.Module.__init__(self)
+            # batchnorm in autoencoding is a thing
+            # https://arxiv.org/pdf/1602.02282.pdf
+
+            from mentality import conv_output_shape
+
+            # encoder
+            self.e_conv1 = nn.Conv2d(3,32, kernel_size=first_kernel, stride=first_stride)
+            self.e_bn1 = nn.BatchNorm2d(32)
+            output_shape = conv_output_shape(input_shape, kernel_size=first_kernel, stride=first_stride)
+
+            self.e_conv2 = nn.Conv2d(32, 32, kernel_size=second_kernel, stride=second_stride)
+            self.e_bn2 = nn.BatchNorm2d(32)
+            self.z_shape = conv_output_shape(output_shape, kernel_size=second_kernel, stride=second_stride)
+
+            self.e_mean = nn.Conv2d(32, 32, kernel_size=self.z_shape, stride=1)
+            self.e_logvar = nn.Conv2d(32, 32, kernel_size=self.z_shape, stride=1)
+
+        def forward(self, x):
+            encoded = F.relu(self.e_bn1(self.e_conv1(x)))
+            encoded = F.relu(self.e_bn2(self.e_conv2(encoded)))
+            mean = self.e_mean(encoded)
+            logvar = self.e_logvar(encoded)
+            return mean, logvar
+
+    class Decoder(nn.Module):
+        def __init__(self, z_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
+            nn.Module.__init__(self)
+
+            from mentality import conv_transpose_output_shape
+
+            # decoder
+            self.d_conv1 = nn.ConvTranspose2d(32, 32, kernel_size=z_shape, stride=1)
+            self.d_bn1 = nn.BatchNorm2d(32)
+
+            self.d_conv2 = nn.ConvTranspose2d(32, 32, kernel_size=second_kernel, stride=second_stride, output_padding=(1,0))
+            self.d_bn2 = nn.BatchNorm2d(32)
+
+            self.d_conv3 = nn.ConvTranspose2d(32, 3, kernel_size=first_kernel, stride=first_stride, output_padding=1)
+
+        def forward(self, z):
+            decoded = F.relu(self.d_bn1(self.d_conv1(z)))
+            decoded = F.relu(self.d_bn2(self.d_conv2(decoded)))
+            decoded = self.d_conv3(decoded)
+            return decoded
+
 
 class DQN(nn.Module):
     def __init__(self):

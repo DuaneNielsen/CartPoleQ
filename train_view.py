@@ -106,6 +106,12 @@ if __name__ == '__main__':
             transform=TVT.Compose([TVT.ToTensor()])
         )
 
+    cartpole_rgb_100_150 = torchvision.datasets.ImageFolder(
+            root='data/images/',
+            transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
+        )
+
+
     cartpole_grescale_28_28 = torchvision.datasets.ImageFolder(
             root='fullscreen/',
             transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
@@ -125,12 +131,15 @@ if __name__ == '__main__':
     Z_DIMS = 32
     device = torch.device("cuda")
 
-    vae = models.VAE()
-    three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
-    conv = models.ConvVAE(INPUT_DIMS,Z_DIMS)
+    #vae = models.VAE()
+    #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
+    # trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
 
+    #conv = models.ConvVAEFixed((400,600))
+    #trainer = Train(conv, device, save_name='conv_run4_cart')
+    #trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=1, epochs=600)
+    #trainer.retest(dataset=cartpole_rgb_400_600, batch_size=16, epochs=10)
 
-    #trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
-    trainer = Train(conv, device, save_name='conv_run2_cart')
-    #trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=16, epochs=600)
-    trainer.retest(dataset=cartpole_rgb_400_600, batch_size=16, epochs=10)
+    conv_100_150 = models.ConvVAEFixed((100, 150))
+    trainer = Train(conv_100_150, device, save_name='conv_100_150_run1_cart')
+    trainer.train_test(dataset=cartpole_rgb_100_150, batch_size=8, epochs=600)
