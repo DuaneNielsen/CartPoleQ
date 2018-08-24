@@ -1,14 +1,16 @@
 import gym
 from abc import abstractmethod, ABC
-from mentality import Observable, OpenCV, ImageVideoWriter, View
+from mentality import Observable, OpenCV, ImageVideoWriter, View, ImageFileWriter
 import pickle
 import models
 import torch
 import torchvision.transforms.functional as tvf
 
+
 class Policy(ABC):
     @abstractmethod
     def action(self, observation): raise NotImplementedError
+
 
 class RandomPolicy():
     def __init__(self, env):
@@ -16,6 +18,7 @@ class RandomPolicy():
 
     def action(self, observation):
         return self.env.action_space.sample()
+
 
 class Rollout(Observable):
     def __init__(self, env):
@@ -88,15 +91,16 @@ class ActionEncoder(View):
 if __name__ == '__main__':
 
     device = torch.device("cuda")
-    env = gym.make('CartPole-v0')
+    env = gym.make('SpaceInvaders-v4')
     random_policy = RandomPolicy(env)
     rollout = Rollout(env)
-    #rollout.registerObserver('input', OpenCV('input'))
+    rollout.registerObserver('input', OpenCV('input'))
     #rollout.registerObserver('input', ImageVideoWriter('data/video/cart/','cartpole'))
-    cvae = models.ConvVAE.load('conv_run2_cart')
-    ae = ActionEncoder(cvae, env, 'run').to(device)
-    rollout.registerObserver('screen_action', ae)
+    rollout.registerObserver('input', ImageFileWriter('data/images/spaceinvaders/fullscreen', 'input', 16384))
+    #cvae = models.ConvVAE.load('conv_run2_cart')
+    #ae = ActionEncoder(cvae, env, 'run').to(device)
+    #rollout.registerObserver('screen_action', ae)
 
 
-    for i_episode in range(20):
-        rollout.rollout(random_policy)
+    for i_episode in range(100):
+        rollout.rollout(random_policy, max_timesteps=1000)

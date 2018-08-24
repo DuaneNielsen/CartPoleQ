@@ -34,15 +34,22 @@ def conv_transpose_output_shape(h_w, kernel_size=1, stride=1, pad=0, output_padd
     w = (h_w[1] - 1) * stride - (2 * pad) + kernel_size[1] + output_padding
     return h, w
 
+class StoreConfig():
+    def __init__(self, object_type, args):
+        self.params = args
+        self.type = object_type
+        self.test_loss = None
+
 """
 ModelConfig is concerned with initializing, loading and saving the model and params
 """
 
 class Storeable(ABC):
+
+    # needs to be fixed so it's not interruptable in the middle of a save!
+
     def __init__(self, *args):
-        self.params = args
-        self.type = type(self)
-        self.test_loss = None
+        self.config = StoreConfig(type(self), args)
 
     @staticmethod
     def fn(filename):
@@ -63,11 +70,12 @@ class Storeable(ABC):
         config_filename, model_filename = Storeable.fn(filename)
 
         with open(config_filename, 'wb') as output:  # Overwrites any existing file.
-            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self.config, output, pickle.HIGHEST_PROTOCOL)
         torch.save(self.state_dict(), model_filename)
 
-    def get_model(self): #raise NotImplementedError
-        return self.type(*self.params)
+    @staticmethod
+    def get_model(config):
+        return config.type(*config.params)
 
     @staticmethod
     def file_exists(filename):
@@ -81,7 +89,7 @@ class Storeable(ABC):
 
         with open(config_filename, 'rb') as input:
             config = pickle.load(input)
-            model = config.get_model()
+            model = Storeable.get_model(config)
             state_dict = torch.load(model_filename)
             model.load_state_dict(state_dict)
         return model
@@ -219,17 +227,19 @@ class ImageVideoWriter(View):
 
 
 class ImageFileWriter(View):
-    def __init__(self, directory, prefix):
+    def __init__(self, directory, prefix, num_images=8192):
         super(ImageFileWriter, self).__init__()
         self.writer = None
         self.directory = directory
         self.prefix = prefix
+        self.num_images = num_images
+        self.imagenumber = 0
 
     def update(self, screen, in_format=None):
 
         frame = NumpyRGBWrapper(screen, in_format).numpyRGB
-        number = str(random.randint(1, 10000))
-        Image.fromarray(frame).save(self.directory + '/' + self.prefix + number + '.png')
+        Image.fromarray(frame).save(self.directory + '/' + self.prefix + str(self.imagenumber) + '.png')
+        self.imagenumber = (self.imagenumber + 1) % self.num_images
 
 
 
@@ -276,6 +286,16 @@ class Plotter():
 
         plt.pause(0.001)
         #plt.draw()
+
+
+class TensorBoardScalar(View):
+    def __init__(self, summary_writer):
+        View.__init__(self)
+        self.tb = summary_writer
+
+    def update(self, name, scalar_value):
+        self.tb.add_scalar(name, scalar_value, self.tb.global_step)
+
 
 class SummaryWriterWithGlobal(SummaryWriter):
     def __init__(self, comment):

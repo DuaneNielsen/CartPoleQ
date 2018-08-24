@@ -1,38 +1,37 @@
 import torchvision
 import models
 import torch
-import mentality
+from mentality import Storeable, Observable, SummaryWriterWithGlobal, OpenCV
 from tqdm import tqdm
 import torch.nn as nn
 import torchvision.transforms as TVT
 import torch.utils.data as du
 
-class Train(mentality.SummaryWriterWithGlobal):
-    def __init__(self, model, device, save_name=None):
-        run_name = save_name if save_name else 'default'
-        mentality.SummaryWriterWithGlobal.__init__(self, run_name)
+tb = SummaryWriterWithGlobal('default')
 
+# this whole class needs a refactor to be set on the model itself
+class Train(Observable):
+    def __init__(self, model, device, tensorboard=None, save_name=None):
+        Observable.__init__(self)
         self.model = model
+        self.tb = tensorboard
 
-        if issubclass(type(model), mentality.Storeable) and save_name:
-            if mentality.Storeable.file_exists(save_name):
-                self.model = mentality.Storeable.load(save_name)
+        run_name = save_name if save_name else 'default'
+
+        if issubclass(type(model), Storeable) and save_name:
+            if Storeable.file_exists(save_name):
+                self.model = Storeable.load(save_name)
         else:
             self.model.apply(self.weights_init)
 
-
-        self.registerObserver('input', mentality.OpenCV('input'))
-        self.registerObserver('output', mentality.OpenCV('output'))
+        if issubclass(type(model), Observable):
+            self.model.registerObserver('input', OpenCV('input'))
+            self.model.registerObserver('output', OpenCV('output'))
 
         self.model = self.model.to(device)
         self.save_name = save_name
 
         self.device = device
-
-
-    def registerObserver(self, tag, view):
-        if issubclass(type(self.model), mentality.Observable):
-            self.model.registerObserver(tag, view)
 
     @staticmethod
     # custom weights initialization called on netG and netD
@@ -40,7 +39,6 @@ class Train(mentality.SummaryWriterWithGlobal):
         if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d or type(m) == nn.Linear:
             torch.nn.init.kaiming_uniform_(m.weight)
             m.bias.data.fill_(0.01)
-
 
     def loader(self, dataset, batch_size):
         loader = torch.utils.data.DataLoader(
@@ -59,14 +57,14 @@ class Train(mentality.SummaryWriterWithGlobal):
         train_loader = self.loader(train_set, batch_size)
         for batch_idx, (data, target) in enumerate(train_loader):
             data = data.to(self.device)
-            self.tensorboard_step()
+            self.tb.tensorboard_step()
             optimizer.zero_grad()
             output = self.model(data)
             if type(output) == tuple:
                 loss = self.model.loss(*output, data)
             else:
                 loss = self.model.loss(output, data)
-            self.tensorboard_scaler('loss/loss', loss/data.shape[0])
+            self.tb.tensorboard_scaler('loss/loss', loss/data.shape[0])
             loss.backward()
             optimizer.step()
             if issubclass(type(self.model), models.Storeable) and self.save_name:
@@ -78,13 +76,13 @@ class Train(mentality.SummaryWriterWithGlobal):
         test_loader = self.loader(test_set, batch_size)
         for batch_idx, (data, target) in enumerate(test_loader):
             data = data.to(self.device)
-            self.tensorboard_step()
+            self.tb.tensorboard_step()
             output = self.model(data)
             if type(output) == tuple:
                 loss = self.model.loss(*output, data)
             else:
                 loss = self.model.loss(output, data)
-            self.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
+            self.tb.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
 
     def train_test(self, dataset, batch_size, epochs):
         for _ in tqdm(range(epochs)):
@@ -98,28 +96,40 @@ class Train(mentality.SummaryWriterWithGlobal):
 
 if __name__ == '__main__':
 
-
-
-
     cartpole_rgb_400_600 = torchvision.datasets.ImageFolder(
             root='data/images/',
             transform=TVT.Compose([TVT.ToTensor()])
         )
 
     cartpole_rgb_100_150 = torchvision.datasets.ImageFolder(
-            root='data/images/',
+            root='data/images/cart',
             transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
         )
 
+    spaceinvaders_rgb_100_150 = torchvision.datasets.ImageFolder(
+            root='data/images/spaceinvaders',
+            transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
+        )
 
-    cartpole_grescale_28_28 = torchvision.datasets.ImageFolder(
-            root='fullscreen/',
+    spaceinvaders_rgb_32_48 = torchvision.datasets.ImageFolder(
+            root='data/images/spaceinvaders',
+            transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
+        )
+
+    small = (84, 64)
+    spaceinvaders_grey_small = torchvision.datasets.ImageFolder(
+            root='data/images/spaceinvaders',
+            transform=TVT.Compose([TVT.Grayscale(1), TVT.Resize(small), TVT.ToTensor()])
+        )
+
+    cartpole_greycale_28_28 = torchvision.datasets.ImageFolder(
+            root='data/images/',
             transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
         )
 
     cartpole_rgb_32_48 = torchvision.datasets.ImageFolder(
-            root='fullscreen/',
-            transform=TVT.Compose([TVT.ToTensor()])
+            root='data/images/',
+            transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
         )
 
 
@@ -127,19 +137,42 @@ if __name__ == '__main__':
                    transform=TVT.Compose([TVT.Resize((32,48)),TVT.Grayscale(3),TVT.ToTensor()]))
 
 
+    mnist_g_32_48 = torchvision.datasets.MNIST('../data', train=True, download=True,
+                   transform=TVT.Compose([TVT.Resize((32, 48)), TVT.ToTensor()]))
+
+
     INPUT_DIMS = 3 * 32 * 48
     Z_DIMS = 32
     device = torch.device("cuda")
 
-    #vae = models.VAE()
+
     #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
-    # trainer = Train(three_linear, device, save_name='3linear_run1_mnist')
+    #trainer = Train(three_linear, device, tb)
+    #trainer.train_test(dataset=mnist_rgb_32_48, batch_size=256, epochs=10)
 
     #conv = models.ConvVAEFixed((400,600))
     #trainer = Train(conv, device, save_name='conv_run4_cart')
     #trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=1, epochs=600)
     #trainer.retest(dataset=cartpole_rgb_400_600, batch_size=16, epochs=10)
 
-    conv_100_150 = models.ConvVAEFixed((100, 150))
-    trainer = Train(conv_100_150, device, save_name='conv_100_150_run1_cart')
-    trainer.train_test(dataset=cartpole_rgb_100_150, batch_size=8, epochs=600)
+    #conv_100_150 = models.ConvVAEFixed((100, 150))
+    #trainer = Train(conv_100_150, device, save_name='conv_100_150_run2_cart')
+    #trainer.train_test(dataset=cartpole_rgb_100_150, batch_size=256, epochs=600)
+
+    #lin_atari = models.AtariConv(small, 64)
+    #trainer = Train(lin_atari, device, save_name='lin_atari_run1_spaceinvaders')
+    #trainer.train_test(dataset=spaceinvaders_grey_small, batch_size=2056, epochs=20)
+
+    #lin_atari = models.AtariConv((32, 48), 32)
+    simple = models.PerceptronVAE((32, 48), 400, 32)
+    trainer = Train(simple, device, tb)
+    trainer.train_test(dataset=mnist_g_32_48, batch_size=2056, epochs=20)
+
+
+    #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
+    #trainer = Train(three_linear, device, save_name='3linear_run1_spaceinvaders')
+    #trainer.train_test(dataset=spaceinvaders_rgb_32_48, batch_size=1024, epochs=600)
+
+    #conv4_100_150 = models.ConvVAE4Fixed((100, 150))
+    #trainer = Train(conv4_100_150, device, save_name='conv_100_150_run3_spaceinv')
+    #trainer.train_test(dataset=spaceinvaders_rgb_100_150, batch_size=128, epochs=600)

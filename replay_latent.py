@@ -18,4 +18,4 @@ for file in os.listdir(directory):
     z = z.to(device)
 
     for row, _ in enumerate(z):
-        y = cvae.decode(z[row],(1,3,400,600))
+        y = cvae.decode(z[row],(1,3,100,150))
