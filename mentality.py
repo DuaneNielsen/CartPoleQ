@@ -165,44 +165,63 @@ class TensorPILWrapper(BaseImageWrapper):
         return self.tensorPIL
 
 
-class Observable:
+"""Dispatcher allows dipatch to views.
+View's register here
+To send a message, inherit Observable and use updateObservers
+"""
+
+
+class Dispatcher:
     def __init__(self):
         self.pipelineView = {}
 
-    def registerObserver(self, tag, observer):
+    def registerView(self, tag, observer):
         if tag not in self.pipelineView:
             self.pipelineView[tag] = []
         self.pipelineView[tag].append(observer)
 
         return tag,len(self.pipelineView[tag]) -1
 
-    def unregisterObserver(self, id):
+    def unregisterView(self, id):
         del self.pipelineView[id[0]][id[1]]
 
-    def updateObservers(self, tag, screen, format=None):
-        if tag not in self.pipelineView:
-            self.pipelineView[tag] = []
-        for observer in self.pipelineView[tag]:
-            observer.update(screen, format)
 
-    """
-    sends a close event to all observers
+""" Observable provides dispatch method.
+To use, make sure the object has a Dispatcher 
+"""
+
+
+class Observable:
+
+    def updateObservers(self, tag, data, metadata=None):
+        if hasattr(self, 'pipelineView'):
+            if tag not in self.pipelineView:
+                self.pipelineView[tag] = []
+            for observer in self.pipelineView[tag]:
+                observer.update(data, metadata)
+
+    """ Sends a close event to all observers.
     used to close video files or save at the end of rollouts
     """
     def endObserverSession(self):
-        for tag in self.pipelineView:
-            for observer in self.pipelineView[tag]:
-                observer.endSession()
+        if hasattr(self, 'pipelineView'):
+            for tag in self.pipelineView:
+                for observer in self.pipelineView[tag]:
+                    observer.endSession()
 
 
+""" Abstract base class for implementing View.
+"""
 
 
-class View():
-    def __init__(self):
-        pass
+class View(ABC):
+    @abstractmethod
+    def update(self, data, metadata):
+        raise NotImplementedError
 
     def endSession(self):
         pass
+
 
 class ImageVideoWriter(View):
     def __init__(self, directory, prefix):
@@ -210,7 +229,6 @@ class ImageVideoWriter(View):
         self.prefix = prefix
         self.number = 0
         self.writer = None
-
 
     def update(self, screen, in_format=None):
         if not self.writer:
@@ -288,13 +306,42 @@ class Plotter():
         #plt.draw()
 
 
-class TensorBoardScalar(View):
-    def __init__(self, summary_writer):
+class TensorBoard(View, SummaryWriter):
+    def __init__(self, comment='default'):
         View.__init__(self)
-        self.tb = summary_writer
+        SummaryWriter.__init__(self, comment=comment)
+        self.global_step = 0
+        self.dispatch = {'tb_step': self.step, 'tb_scalar':self.scalar}
 
-    def update(self, name, scalar_value):
-        self.tb.add_scalar(name, scalar_value, self.tb.global_step)
+    def register(self, model):
+        model.registerView('tb_step', self)
+        model.registerView('tb_training_loss', self)
+        model.registerView('tb_test_loss', self)
+
+    def update(self, data, metadata):
+        func = self.dispatch.get(metadata['func'])
+        func(data, metadata)
+
+    def step(self, data, metadata):
+        self.global_step += 1
+
+    def scalar(self, value, metadata):
+        self.add_scalar(metadata['name'], value, self.global_step)
+
+class TensorBoardObservable(Observable):
+    def tb_global_step(self):
+        self.updateObservers('tb_step', None, {'func': 'tb_step'})
+
+    def writeScalarToTB(self, tag, value, tb_name):
+        self.updateObservers(tag, value,
+                             {'func': 'tb_scalar',
+                              'name': tb_name})
+
+    def writeTrainingLossToTB(self, loss):
+        self.writeScalarToTB('tb_training_loss', loss, 'loss/train')
+
+    def writeTestLossToTB(self, loss):
+        self.writeScalarToTB('tb_test_loss', loss, 'loss/test')
 
 
 class SummaryWriterWithGlobal(SummaryWriter):

@@ -9,36 +9,29 @@ import torch.utils.data as du
 
 tb = SummaryWriterWithGlobal('default')
 
+#run_name = save_name if save_name else 'default'
+
+
+# if issubclass(type(model), Storeable) and save_name:
+#     if Storeable.file_exists(save_name):
+#         self.model = Storeable.load(save_name)
+# else:
+#     self.model.apply(self.weights_init)
+#
+# if issubclass(type(model), Observable):
+#     self.model.registerView('input', OpenCV('input'))
+#     self.model.registerView('output', OpenCV('output'))
+
+
+@staticmethod
+# custom weights initialization called on netG and netD
+def weights_init(m):
+    if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d or type(m) == nn.Linear:
+        torch.nn.init.kaiming_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+
 # this whole class needs a refactor to be set on the model itself
 class Train(Observable):
-    def __init__(self, model, device, tensorboard=None, save_name=None):
-        Observable.__init__(self)
-        self.model = model
-        self.tb = tensorboard
-
-        run_name = save_name if save_name else 'default'
-
-        if issubclass(type(model), Storeable) and save_name:
-            if Storeable.file_exists(save_name):
-                self.model = Storeable.load(save_name)
-        else:
-            self.model.apply(self.weights_init)
-
-        if issubclass(type(model), Observable):
-            self.model.registerObserver('input', OpenCV('input'))
-            self.model.registerObserver('output', OpenCV('output'))
-
-        self.model = self.model.to(device)
-        self.save_name = save_name
-
-        self.device = device
-
-    @staticmethod
-    # custom weights initialization called on netG and netD
-    def weights_init(m):
-        if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d or type(m) == nn.Linear:
-            torch.nn.init.kaiming_uniform_(m.weight)
-            m.bias.data.fill_(0.01)
 
     def loader(self, dataset, batch_size):
         loader = torch.utils.data.DataLoader(
@@ -50,16 +43,16 @@ class Train(Observable):
         )
         return loader
 
-    def train(self, dataset, batch_size, optimizer=None, scheduler=None):
-        self.model.train()
+    def train(self, dataset, batch_size, device, optimizer=None, scheduler=None):
+        self.train()
         if not optimizer:
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
-        train_set = du.Subset(dataset, range(len(dataset) // 5, len(dataset) -1))
+            optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        train_set = du.Subset(dataset, range(len(dataset) // 10, len(dataset) -1))
         train_loader = self.loader(train_set, batch_size)
         for batch_idx, (data, target) in enumerate(train_loader):
             if scheduler:
                scheduler.step()
-            data = data.to(self.device)
+            data = data.to(device)
             self.tb.tensorboard_step()
             optimizer.zero_grad()
             output = self.model(data, noise=False)
@@ -76,7 +69,7 @@ class Train(Observable):
     def test(self, dataset, batch_size):
         with torch.no_grad():
             self.model.eval()
-            test_set = du.Subset(dataset, range(0,len(dataset)//5))
+            test_set = du.Subset(dataset, range(0,len(dataset)//10))
             test_loader = self.loader(test_set, batch_size)
             for batch_idx, (data, target) in enumerate(test_loader):
                 data = data.to(self.device)

@@ -7,7 +7,7 @@ import os
 
 device = torch.device('cuda')
 cvae = models.ConvVAE.load('conv_run2_cart').to(device)
-cvae.registerObserver('output', OpenCV('decode'))
+cvae.registerView('output', OpenCV('decode'))
 
 directory = os.fsencode('data/cart/latent/')
 
