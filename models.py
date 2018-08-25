@@ -10,7 +10,7 @@ from mentality import Observable, Storeable, Lossable, Checkable
 class BceKldLoss(Lossable):
     # Reconstruction + KL divergence losses summed over all elements and batch
     def loss(self, recon_x, mu, logvar, x):
-        BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+        BCE = F.binary_cross_entropy(recon_x, x)
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -34,6 +34,24 @@ class BcelKldLoss(Lossable):
 
         return BCE + KLD
 
+
+class BceLoss(Lossable):
+    # Reconstruction + KL divergence losses summed over all elements and batch
+    def loss(self, recon_x, mu, logvar, x):
+        BCE = F.binary_cross_entropy(recon_x, x)
+
+        # see Appendix B from VAE paper:
+        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        # https://arxiv.org/abs/1312.6114
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+        return BCE #+ KLD
+
+
+class MSELoss(Lossable):
+    def loss(self, recon_x, mu, logvar, x):
+        return F.mse_loss(recon_x, x)
 
 
 class VAE(nn.Module, Observable, Storeable, BceKldLoss):
@@ -200,7 +218,7 @@ class BaseVAE(nn.Module, Observable):
         self.encoder = encoder
         self.decoder = decoder
 
-    def forward(self, x):
+    def forward(self, x, noise=True):
         input_shape = x.shape
         indices = None
         self.updateObservers('input', x[0])
@@ -210,7 +228,7 @@ class BaseVAE(nn.Module, Observable):
 
         if len(encoded) > 2:
             indices = encoded[2]
-        z = self.reparameterize(mu, logvar)
+        z = self.reparameterize(mu, logvar, noise=noise)
         if indices:
             decoded = self.decoder(z, indices)
         else:
@@ -221,8 +239,8 @@ class BaseVAE(nn.Module, Observable):
         self.updateObservers('output', decoded[0].data)
         return decoded, mu, logvar
 
-    def reparameterize(self, mu, logvar):
-        if self.training:
+    def reparameterize(self, mu, logvar, noise=True):
+        if self.training and noise:
             std = torch.exp(0.5*logvar)
             eps = torch.randn_like(std)
             return eps.mul(std).add_(mu)
@@ -563,17 +581,62 @@ class AtariConv(BaseVAE, Storeable, BceKldLoss):
         def forward(self, z, indices):
             return torch.sigmoid(self.bn1(self.ct1(self.up1(z, indices[0]))))
 
+class AtariConv_v2(BaseVAE, Storeable, BceLoss):
+    def __init__(self):
+        self.input_shape = (210, 160)
+        encoder = self.Encoder()
+        decoder = self.Decoder()
+        BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
+
+    class Encoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.cn1 = nn.Conv2d(3, 32, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(32)
+            self.mp1 = nn.MaxPool2d(2, 2, return_indices=True)
+
+            self.cn2 = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+            self.mp2 = nn.MaxPool2d(2, 2, return_indices=True)
+
+        def forward(self, x):
+            indices = []
+            encoded, ind = self.mp1(F.relu(self.bn1(self.cn1(x))))
+            indices.append(ind)
+            mu, ind = self.mp2(F.relu(self.bn2(self.cn2(encoded))))
+            indices.append(ind)
+            return mu, None, indices
+
+    class Decoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.ct2 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+            self.up2 = nn.MaxUnpool2d(2, 2)
+
+            self.ct1 = nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(3)
+            self.up1 = nn.MaxUnpool2d(2, 2)
+
+        def forward(self, z, indices):
+            decoded = F.relu(self.bn2(self.ct2(self.up2(z, indices[1]))))
+            return torch.sigmoid(self.bn1(self.ct1(self.up1(decoded, indices[0]))))
+
+
 
 if __name__ == '__main__':
 
-    i_size = (2, 3, 10, 10)
+    i_size = (2, 3, 40, 40)
     z_size = 2
 
     #atari = AtariLinear(i_size, 2).encoder.grad_check(i_size, batch=True)
     #atari = AtariLinear(i_size, 2).decoder.grad_check(z_size, batch=True)
 
-    m = AtariConv()
-    mu, logvar, indx  = AtariConv().encoder(torch.randn(i_size))
+    AtariConv_v2().encoder.grad_check((Checkable.build_input(i_size),))
+
+    m = AtariConv_v2()
+    mu, logvar, indx = AtariConv().encoder(torch.randn(i_size))
     input_var = Checkable.build_input(tuple(mu.shape))
     AtariConv().decoder.grad_check((input_var, indx))
 
