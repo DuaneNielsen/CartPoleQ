@@ -71,18 +71,19 @@ class Train(Observable):
                 self.model.save(self.save_name)
 
     def test(self, dataset, batch_size):
-        self.model.eval()
-        test_set = du.Subset(dataset, range(0,len(dataset)//5))
-        test_loader = self.loader(test_set, batch_size)
-        for batch_idx, (data, target) in enumerate(test_loader):
-            data = data.to(self.device)
-            self.tb.tensorboard_step()
-            output = self.model(data)
-            if type(output) == tuple:
-                loss = self.model.loss(*output, data)
-            else:
-                loss = self.model.loss(output, data)
-            self.tb.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
+        with torch.no_grad():
+            self.model.eval()
+            test_set = du.Subset(dataset, range(0,len(dataset)//5))
+            test_loader = self.loader(test_set, batch_size)
+            for batch_idx, (data, target) in enumerate(test_loader):
+                data = data.to(self.device)
+                self.tb.tensorboard_step()
+                output = self.model(data)
+                if type(output) == tuple:
+                    loss = self.model.loss(*output, data)
+                else:
+                    loss = self.model.loss(output, data)
+                self.tb.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
 
     def train_test(self, dataset, batch_size, epochs):
         for _ in tqdm(range(epochs)):
@@ -104,6 +105,11 @@ if __name__ == '__main__':
     cartpole_rgb_100_150 = torchvision.datasets.ImageFolder(
             root='data/images/cart',
             transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
+        )
+
+    spaceinvaders_rgb_210_160 = torchvision.datasets.ImageFolder(
+            root='data/images/spaceinvaders',
+            transform=TVT.Compose([TVT.ToTensor()])
         )
 
     spaceinvaders_rgb_100_150 = torchvision.datasets.ImageFolder(
@@ -145,6 +151,10 @@ if __name__ == '__main__':
     Z_DIMS = 32
     device = torch.device("cuda")
 
+    atari_conv = models.AtariConv()
+    trainer = Train(atari_conv, device, tb, save_name='first_conv_layer_space_invaders_run1')
+    trainer.train_test(dataset=spaceinvaders_rgb_210_160, batch_size=56, epochs=10)
+
 
     #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
     #trainer = Train(three_linear, device, tb)
@@ -163,10 +173,10 @@ if __name__ == '__main__':
     #trainer = Train(lin_atari, device, save_name='lin_atari_run1_spaceinvaders')
     #trainer.train_test(dataset=spaceinvaders_grey_small, batch_size=2056, epochs=20)
 
-    #lin_atari = models.AtariConv((32, 48), 32)
-    simple = models.PerceptronVAE((32, 48), 400, 32)
-    trainer = Train(simple, device, tb)
-    trainer.train_test(dataset=mnist_g_32_48, batch_size=2056, epochs=20)
+    #lin_atari = models.AtariLinear((32, 48), 32)
+    #simple = models.PerceptronVAE((32, 48), 400, 32)
+    #trainer = Train(lin_atari, device, tb)
+    #trainer.train_test(dataset=mnist_g_32_48, batch_size=2056, epochs=20)
 
 
     #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mentality import Observable, Storeable, Lossable
+from mentality import Observable, Storeable, Lossable, Checkable
 
 # loss should attached to the model, but set during training,
 # making it a pure inheritable thing means code changes required to
@@ -192,7 +192,7 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
         return recon, mu, logvar
 
 
-class BaseVAE(nn.Module, Observable, Storeable):
+class BaseVAE(nn.Module, Observable):
     def __init__(self, encoder, decoder):
         nn.Module.__init__(self)
         Observable.__init__(self)
@@ -202,13 +202,23 @@ class BaseVAE(nn.Module, Observable, Storeable):
 
     def forward(self, x):
         input_shape = x.shape
+        indices = None
         self.updateObservers('input', x[0])
-        mu, logvar = self.encoder(x)
+        encoded = self.encoder(x)
+        mu = encoded[0]
+        logvar = encoded[1]
+
+        if len(encoded) > 2:
+            indices = encoded[2]
         z = self.reparameterize(mu, logvar)
-        decoded = self.decoder(z)
+        if indices:
+            decoded = self.decoder(z, indices)
+        else:
+            decoded = self.decoder(z)
+
         # should probably make decoder return same shape as encoder
         decoded = decoded.view(input_shape)
-        self.updateObservers('output', decoded[0])
+        self.updateObservers('output', decoded[0].data)
         return decoded, mu, logvar
 
     def reparameterize(self, mu, logvar):
@@ -351,7 +361,7 @@ class ConvVAE4Fixed(BaseVAE, Storeable, BcelKldLoss):
 
 
 # (210,160)
-class AtariConv(BaseVAE, Storeable, BcelKldLoss):
+class AtariLinear(BaseVAE, Storeable, BceKldLoss):
     def __init__(self, input_shape, z_size):
         self.input_shape = input_shape
         self.input_size = self.input_shape[0] * self.input_shape[1]
@@ -360,7 +370,7 @@ class AtariConv(BaseVAE, Storeable, BcelKldLoss):
         BaseVAE.__init__(self, encoder, decoder)
         Storeable.__init__(self, input_shape, z_size)
 
-    class Encoder(nn.Module):
+    class Encoder(nn.Module, Checkable):
         def __init__(self, input_shape, z_size):
             nn.Module.__init__(self)
             self.input_shape = input_shape
@@ -383,7 +393,7 @@ class AtariConv(BaseVAE, Storeable, BcelKldLoss):
             logvar = F.relu(self.logvar(encoded))
             return mu, logvar
 
-    class Decoder(nn.Module):
+    class Decoder(nn.Module, Checkable):
         def __init__(self, input_shape, z_size):
             nn.Module.__init__(self)
             self.input_shape = input_shape
@@ -401,7 +411,7 @@ class AtariConv(BaseVAE, Storeable, BcelKldLoss):
         def forward(self, encoded):
             decoded = F.relu(self.bn_mu(self.mu(encoded)))
             decoded = F.relu(self.bn2(self.l2(decoded)))
-            decoded = F.relu(self.l1(decoded))
+            decoded = torch.sigmoid(self.l1(decoded))
             #decoded = decoded.view(-1, self.input_shape[0], self.input_shape[1])
             return decoded
 
@@ -436,7 +446,6 @@ class SimpleLinear(BaseVAE, BcelKldLoss):
         def forward(self, z):
             return F.relu(self.decoder(z))
 
-
 class PerceptronVAE(BaseVAE, BceKldLoss):
     def __init__(self, input_shape, middle_size, z_size):
         self.input_shape = input_shape
@@ -446,7 +455,7 @@ class PerceptronVAE(BaseVAE, BceKldLoss):
         BaseVAE.__init__(self, encoder, decoder)
         Storeable.__init__(self, input_shape, z_size)
 
-    class Encoder(nn.Module):
+    class Encoder(nn.Module, Checkable):
         def __init__(self, input_size, middle_size, z_size):
             nn.Module.__init__(self)
             self.input_size = input_size
@@ -461,7 +470,7 @@ class PerceptronVAE(BaseVAE, BceKldLoss):
             logvar = F.relu(self.logvar(middle))
             return mu, logvar
 
-    class Decoder(nn.Module):
+    class Decoder(nn.Module, Checkable):
         def __init__(self, input_size, middle_size, z_size):
             nn.Module.__init__(self)
             self.middle = nn.Linear(z_size, middle_size)
@@ -512,21 +521,60 @@ class Linear(torch.nn.Module, Observable):
     def forward(self, x):
         self.updateObservers('input', x[0])
         shape = x.shape
-        recon =  self.l(x.view(-1, self.input_dims))
+        recon = self.l(x.view(-1, self.input_dims))
         recon = recon.view(shape)
         self.updateObservers('output', recon[0].detach())
         return recon
 
 
+class AtariConv(BaseVAE, Storeable, BceKldLoss):
+    def __init__(self):
+        self.input_shape = (210, 160)
+        encoder = self.Encoder()
+        decoder = self.Decoder()
+        BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
+
+    class Encoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.cn1 = nn.Conv2d(3, 32, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(32)
+            self.mp1 = nn.MaxPool2d(2, 2, return_indices=True)
+
+            self.cn2 = nn.Conv2d(3, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+            self.mp2 = nn.MaxPool2d(2, 2, return_indices=False)
+
+        def forward(self, x):
+            indices = []
+            mu, ind = self.mp1(F.relu(self.bn1(self.cn1(x))))
+            indices.append(ind)
+            logvar = self.mp2(F.relu(self.bn2(self.cn2(x))))
+            return mu, logvar, indices
+
+    class Decoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.ct1 = nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(3)
+            self.up1 = nn.MaxUnpool2d(2, 2)
+
+        def forward(self, z, indices):
+            return torch.sigmoid(self.bn1(self.ct1(self.up1(z, indices[0]))))
+
+
 if __name__ == '__main__':
 
-    from torch.autograd import gradcheck, Variable
-    size = (10, 10)
-    simpleLinear = SimpleLinear(size, 2).double()
-    test_input = (Variable(torch.randn(3, 1, 10, 10).double(), requires_grad=True),)
-    test_z = (Variable(torch.randn(3, 1, 2).double(), requires_grad=True),)
-    test = gradcheck(simpleLinear.encoder, test_input, eps=1e-6, atol=1e-4)
-    test = gradcheck(simpleLinear.decoder, test_z, eps=1e-6, atol=1e-4)
-    print('encoder and decoder passed')
-    test = gradcheck(simpleLinear, test_input, eps=1e-6, atol=1e-4)
+    i_size = (2, 3, 10, 10)
+    z_size = 2
+
+    #atari = AtariLinear(i_size, 2).encoder.grad_check(i_size, batch=True)
+    #atari = AtariLinear(i_size, 2).decoder.grad_check(z_size, batch=True)
+
+    m = AtariConv()
+    mu, logvar, indx  = AtariConv().encoder(torch.randn(i_size))
+    input_var = Checkable.build_input(tuple(mu.shape))
+    AtariConv().decoder.grad_check((input_var, indx))
+
 

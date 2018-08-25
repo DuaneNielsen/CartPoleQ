@@ -8,7 +8,7 @@ from torchvision import datasets
 from torchvision import transforms as T
 from torchvision.utils import save_image
 from mentality import Observable, OpenCV, Storeable
-from bayes_loss_predictor import LossPredictor
+from scratches.bayes_loss_predictor import LossPredictor
 
 class VAE(nn.Module, Observable, Storeable):
     def __init__(self):
