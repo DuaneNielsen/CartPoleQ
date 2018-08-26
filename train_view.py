@@ -1,13 +1,13 @@
 import torchvision
 import models
 import torch
-from mentality import Storeable, Observable, SummaryWriterWithGlobal, OpenCV
+from mentality import Storeable, Observable, SummaryWriterWithGlobal, OpenCV, TensorBoardObservable
 from tqdm import tqdm
 import torch.nn as nn
 import torchvision.transforms as TVT
-import torch.utils.data as du
 
-tb = SummaryWriterWithGlobal('default')
+
+#tb = SummaryWriterWithGlobal('default')
 
 #run_name = save_name if save_name else 'default'
 
@@ -18,9 +18,10 @@ tb = SummaryWriterWithGlobal('default')
 # else:
 #     self.model.apply(self.weights_init)
 #
-# if issubclass(type(model), Observable):
-#     self.model.registerView('input', OpenCV('input'))
-#     self.model.registerView('output', OpenCV('output'))
+
+
+# if issubclass(type(self.model), models.Storeable) and self.save_name:
+#     self.model.save(self.save_name)
 
 
 @staticmethod
@@ -30,143 +31,78 @@ def weights_init(m):
         torch.nn.init.kaiming_uniform_(m.weight)
         m.bias.data.fill_(0.01)
 
-# this whole class needs a refactor to be set on the model itself
-class Train(Observable):
-
-    def loader(self, dataset, batch_size):
-        loader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=batch_size,
-            num_workers=0,
-            shuffle=True,
-            pin_memory=True
-        )
-        return loader
-
-    def train(self, dataset, batch_size, device, optimizer=None, scheduler=None):
-        self.train()
-        if not optimizer:
-            optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        train_set = du.Subset(dataset, range(len(dataset) // 10, len(dataset) -1))
-        train_loader = self.loader(train_set, batch_size)
-        for batch_idx, (data, target) in enumerate(train_loader):
-            if scheduler:
-               scheduler.step()
-            data = data.to(device)
-            self.tb.tensorboard_step()
-            optimizer.zero_grad()
-            output = self.model(data, noise=False)
-            if type(output) == tuple:
-                loss = self.model.loss(*output, data)
-            else:
-                loss = self.model.loss(output, data)
-            self.tb.tensorboard_scaler('loss/loss', loss/data.shape[0])
-            loss.backward()
-            optimizer.step()
-            if issubclass(type(self.model), models.Storeable) and self.save_name:
-                self.model.save(self.save_name)
-
-    def test(self, dataset, batch_size):
-        with torch.no_grad():
-            self.model.eval()
-            test_set = du.Subset(dataset, range(0,len(dataset)//10))
-            test_loader = self.loader(test_set, batch_size)
-            for batch_idx, (data, target) in enumerate(test_loader):
-                data = data.to(self.device)
-                self.tb.tensorboard_step()
-                output = self.model(data)
-                if type(output) == tuple:
-                    loss = self.model.loss(*output, data)
-                else:
-                    loss = self.model.loss(output, data)
-                self.tb.tensorboard_scaler('loss/test_loss', loss/data.shape[0])
-
-    def train_test(self, dataset, batch_size, epochs, optimizer=None, scheduler=None):
-        for _ in tqdm(range(epochs)):
-            self.train(dataset, batch_size, optimizer, scheduler)
-            self.test(dataset, batch_size)
-
-    def retest(self, dataset, batch_size, epochs):
-        for _ in tqdm(range(epochs)):
-            self.test(dataset, batch_size)
-
 
 if __name__ == '__main__':
 
-    mnist = False
-    spaceinvaders = True
-    cartpole = False
+    cartpole_rgb_400_600 = torchvision.datasets.ImageFolder(
+        root='data/images/',
+        transform=TVT.Compose([TVT.ToTensor()])
+    )
 
-    if cartpole:
-        cartpole_rgb_400_600 = torchvision.datasets.ImageFolder(
-                root='data/images/',
-                transform=TVT.Compose([TVT.ToTensor()])
-            )
+    cartpole_rgb_100_150 = torchvision.datasets.ImageFolder(
+        root='data/images/cart',
+        transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
+    )
 
-        cartpole_rgb_100_150 = torchvision.datasets.ImageFolder(
-                root='data/images/cart',
-                transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
-            )
+    cartpole_greycale_28_28 = torchvision.datasets.ImageFolder(
+        root='data/images/',
+        transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
+    )
 
-        cartpole_greycale_28_28 = torchvision.datasets.ImageFolder(
-                root='data/images/',
-                transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
-            )
+    cartpole_rgb_32_48 = torchvision.datasets.ImageFolder(
+        root='data/images/',
+        transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
+    )
 
-        cartpole_rgb_32_48 = torchvision.datasets.ImageFolder(
-                root='data/images/',
-                transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
-            )
+    spaceinvaders_rgb_210_160 = torchvision.datasets.ImageFolder(
+        root='data/images/spaceinvaders',
+        transform=TVT.Compose([TVT.ToTensor()])
+    )
 
+    spaceinvaders_rgb_100_150 = torchvision.datasets.ImageFolder(
+        root='data/images/spaceinvaders',
+        transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
+    )
 
+    spaceinvaders_rgb_32_48 = torchvision.datasets.ImageFolder(
+        root='data/images/spaceinvaders',
+        transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
+    )
 
-    if spaceinvaders:
-        spaceinvaders_rgb_210_160 = torchvision.datasets.ImageFolder(
-                root='data/images/spaceinvaders',
-                transform=TVT.Compose([TVT.ToTensor()])
-            )
-
-        spaceinvaders_rgb_100_150 = torchvision.datasets.ImageFolder(
-                root='data/images/spaceinvaders',
-                transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
-            )
-
-        spaceinvaders_rgb_32_48 = torchvision.datasets.ImageFolder(
-                root='data/images/spaceinvaders',
-                transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
-            )
-
-        small = (84, 64)
-        spaceinvaders_grey_small = torchvision.datasets.ImageFolder(
-                root='data/images/spaceinvaders',
-                transform=TVT.Compose([TVT.Grayscale(1), TVT.Resize(small), TVT.ToTensor()])
-            )
+    small = (84, 64)
+    spaceinvaders_grey_small = torchvision.datasets.ImageFolder(
+        root='data/images/spaceinvaders',
+        transform=TVT.Compose([TVT.Grayscale(1), TVT.Resize(small), TVT.ToTensor()])
+    )
 
 
-    if mnist:
-
-        mnist_rgb_32_48 = torchvision.datasets.MNIST('../data', train=True, download=True,
-                       transform=TVT.Compose([TVT.Resize((32,48)),TVT.Grayscale(3),TVT.ToTensor()]))
+    mnist_rgb_32_48 = torchvision.datasets.MNIST('../data', train=True, download=True,
+                                                 transform=TVT.Compose([TVT.Resize((32,48)),TVT.Grayscale(3),TVT.ToTensor()]))
 
 
-        mnist_g_32_48 = torchvision.datasets.MNIST('../data', train=True, download=True,
-                       transform=TVT.Compose([TVT.Resize((32, 48)), TVT.ToTensor()]))
+    mnist_g_32_48 = torchvision.datasets.MNIST('../data', train=True, download=True,
+                                               transform=TVT.Compose([TVT.Resize((32, 48)), TVT.ToTensor()]))
 
 
-    INPUT_DIMS = 3 * 32 * 48
-    Z_DIMS = 32
     device = torch.device("cuda")
 
-    atari_conv = models.AtariConv_v2()
-    trainer = Train(atari_conv, device, tb, save_name='first_conv_layer_space_invaders_run11')
+    def registerCV(model):
+        model.registerView('input', OpenCV('input'))
+        model.registerView('output', OpenCV('output'))
 
+
+    atari_conv = models.AtariConv_v2()
+    registerCV(atari_conv)
+
+    for epoch in tqdm(range(3)):
+        atari_conv.train_model(spaceinvaders_rgb_210_160, 56, device)
+
+    #trainer = Train(atari_conv, device, tb, save_name='first_conv_layer_space_invaders_run11')
     #optimizer = torch.optim.SGD(trainer.model.parameters(), lr=0.000000001)
     #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 600)
-    optimizer = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
-    scheduler = None
-    trainer.train_test(dataset=spaceinvaders_rgb_210_160, batch_size=56, epochs=30, optimizer=optimizer, scheduler=scheduler)
+    #optimizer = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
+    #scheduler = None
     #trainer.retest(dataset=spaceinvaders_rgb_210_160, batch_size=56, epochs=1)
-
 
     #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
     #trainer = Train(three_linear, device, tb)

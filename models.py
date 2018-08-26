@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mentality import Observable, Storeable, Lossable, Checkable
+from mentality import Dispatcher, Observable, Storeable, Lossable, Checkable, Trainable
 
 # loss should attached to the model, but set during training,
 # making it a pure inheritable thing means code changes required to
@@ -210,10 +210,10 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
         return recon, mu, logvar
 
 
-class BaseVAE(nn.Module, Observable):
+class BaseVAE(nn.Module, Dispatcher, Observable):
     def __init__(self, encoder, decoder):
         nn.Module.__init__(self)
-        Observable.__init__(self)
+        Dispatcher.__init__(self)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -434,7 +434,7 @@ class AtariLinear(BaseVAE, Storeable, BceKldLoss):
             return decoded
 
 
-class SimpleLinear(BaseVAE, BcelKldLoss):
+class SimpleLinear(BaseVAE, Storeable, BcelKldLoss):
     def __init__(self, input_shape, z_size):
         self.input_shape = input_shape
         self.input_size = self.input_shape[0] * self.input_shape[1]
@@ -581,7 +581,7 @@ class AtariConv(BaseVAE, Storeable, BceKldLoss):
         def forward(self, z, indices):
             return torch.sigmoid(self.bn1(self.ct1(self.up1(z, indices[0]))))
 
-class AtariConv_v2(BaseVAE, Storeable, BceLoss):
+class AtariConv_v2(BaseVAE, Storeable, MSELoss, Trainable):
     def __init__(self):
         self.input_shape = (210, 160)
         encoder = self.Encoder()
@@ -600,17 +600,48 @@ class AtariConv_v2(BaseVAE, Storeable, BceLoss):
             self.bn2 = nn.BatchNorm2d(32)
             self.mp2 = nn.MaxPool2d(2, 2, return_indices=True)
 
+            self.cn3 = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(32)
+            self.mp3 = nn.MaxPool2d(2, 2, return_indices=True)
+
+            self.cn4 = nn.Conv2d(32, 16, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(16)
+            self.mp4 = nn.MaxPool2d(2, 2, return_indices=True)
+
+
         def forward(self, x):
             indices = []
-            encoded, ind = self.mp1(F.relu(self.bn1(self.cn1(x))))
+
+            encoded = F.relu(self.bn1(self.cn1(x)))
+            encoded, ind = self.mp1(encoded)
             indices.append(ind)
-            mu, ind = self.mp2(F.relu(self.bn2(self.cn2(encoded))))
+
+            encoded = F.relu(self.bn2(self.cn2(encoded)))
+            encoded, ind = self.mp2(encoded)
             indices.append(ind)
-            return mu, None, indices
+
+            encoded = F.relu(self.bn3(self.cn3(encoded)))
+            encoded, ind = self.mp3(encoded)
+            indices.append(ind)
+
+            encoded = F.relu(self.bn4(self.cn4(encoded)))
+            encoded, ind = self.mp4(encoded)
+            indices.append(ind)
+
+            return encoded, None, indices
 
     class Decoder(nn.Module, Checkable):
         def __init__(self):
             nn.Module.__init__(self)
+
+            self.ct4 = nn.ConvTranspose2d(16, 32, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(32)
+            self.up4 = nn.MaxUnpool2d(2, 2)
+
+            self.ct3 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(32)
+            self.up3 = nn.MaxUnpool2d(2, 2)
+
             self.ct2 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=1)
             self.bn2 = nn.BatchNorm2d(32)
             self.up2 = nn.MaxUnpool2d(2, 2)
@@ -620,8 +651,20 @@ class AtariConv_v2(BaseVAE, Storeable, BceLoss):
             self.up1 = nn.MaxUnpool2d(2, 2)
 
         def forward(self, z, indices):
-            decoded = F.relu(self.bn2(self.ct2(self.up2(z, indices[1]))))
-            return torch.sigmoid(self.bn1(self.ct1(self.up1(decoded, indices[0]))))
+
+            decoded = self.up4(z, indices[3], output_size=(18, 12))
+            decoded = F.relu(self.bn4(self.ct4(decoded)))
+
+            decoded = self.up3(decoded, indices[2], output_size=(45, 33))
+            decoded = F.relu(self.bn3(self.ct3(decoded)))
+
+            decoded = self.up2(decoded, indices[1], output_size=(99,74))
+            decoded = F.relu(self.bn2(self.ct2(decoded)))
+
+            decoded = self.up1(decoded, indices[0], output_size=(206,156))
+            decoded = self.bn1(self.ct1(decoded))
+            #return F.relu(decoded)
+            return torch.sigmoid(decoded)
 
 
 

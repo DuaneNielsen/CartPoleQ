@@ -34,7 +34,7 @@ class TestTensorBoardDispatch(TestCase):
             m.writeScalar()
             m.global_step()
 
-class Model2(Dispatcher, TensorBoardObservable):
+class Model2(Dispatcher, Observable, TensorBoardObservable):
     def __init__(self):
         Dispatcher.__init__(self)
         self.loss = 0

@@ -14,6 +14,7 @@ import torchvision.transforms as TVT
 import torchvision.transforms.functional as TVF
 from PIL import Image
 import imageio
+import torch.utils.data as du
 
 """
 Utility function for computing output of convolutions
@@ -328,7 +329,15 @@ class TensorBoard(View, SummaryWriter):
     def scalar(self, value, metadata):
         self.add_scalar(metadata['name'], value, self.global_step)
 
-class TensorBoardObservable(Observable):
+
+""" Convenience methods for dispatch to tensorboard
+requires that the object also inherit Observable
+"""
+
+
+# noinspection PyUnresolvedReferences
+class TensorBoardObservable:
+
     def tb_global_step(self):
         self.updateObservers('tb_step', None, {'func': 'tb_step'})
 
@@ -389,3 +398,52 @@ class Checkable():
     def grad_check(self, *args):
         from torch.autograd import gradcheck
         gradcheck(self.double(), *args, eps=1e-6, atol=1e-4)
+
+class Trainable(TensorBoardObservable):
+
+    @staticmethod
+    def loader(dataset, batch_size):
+        loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            num_workers=0,
+            shuffle=True,
+            pin_memory=True
+        )
+        return loader
+
+    def train_model(self, dataset, batch_size, device, optimizer=None):
+        self.to(device)
+        self.train()
+        if not optimizer:
+            optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        train_set = du.Subset(dataset, range(len(dataset) // 10, len(dataset) -1))
+        train_loader = self.loader(train_set, batch_size)
+        for batch_idx, (data, target) in enumerate(train_loader):
+            data = data.to(device)
+            optimizer.zero_grad()
+            output = self(data, noise=False)
+            if type(output) == tuple:
+                loss = self.loss(*output, data)
+            else:
+                loss = self.loss(output, data)
+            self.writeTrainingLossToTB(loss/data.shape[0])
+            loss.backward()
+            optimizer.step()
+            self.tb_global_step()
+
+    def test(self, dataset, batch_size):
+        with torch.no_grad():
+            self.model.eval()
+            test_set = du.Subset(dataset, range(0,len(dataset)//10))
+            test_loader = self.loader(test_set, batch_size)
+            for batch_idx, (data, target) in enumerate(test_loader):
+                data = data.to(self.device)
+
+                output = self.model(data)
+                if type(output) == tuple:
+                    loss = self.model.loss(*output, data)
+                else:
+                    loss = self.model.loss(output, data)
+                self.writeTestLossToTB(loss/data.shape[0])
+                self.tb_global_step()
