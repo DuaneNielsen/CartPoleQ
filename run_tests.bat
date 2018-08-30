@@ -1,2 +1,2 @@
-call %VENV_PATH%/activate.bat
+call %VENV_PATH%\Scripts\activate.bat
 python run_tests.py
