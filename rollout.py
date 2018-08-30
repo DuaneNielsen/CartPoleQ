@@ -1,10 +1,11 @@
 import gym
 from abc import abstractmethod, ABC
-from mentality import Observable, OpenCV, ImageVideoWriter, View, ImageFileWriter
+from mentality import Dispatcher, Observable, OpenCV, ImageVideoWriter, View, ImageFileWriter, Storeable
 import pickle
 import models
 import torch
 import torchvision.transforms.functional as tvf
+import numpy as np
 
 
 class Policy(ABC):
@@ -20,9 +21,9 @@ class RandomPolicy():
         return self.env.action_space.sample()
 
 
-class Rollout(Observable):
+class Rollout(Dispatcher, Observable):
     def __init__(self, env):
-        Observable.__init__(self)
+        Dispatcher.__init__(self)
         self.env = env
 
     def rollout(self, policy, max_timesteps=100):
@@ -57,8 +58,7 @@ class ActionEncoder(View):
         self.model = model
         self.model.eval()
         self.session = 1
-        self.z_list = []
-        self.a_list = []
+        self.sess_obs_act = None
         self.filename = filename
         self.action_embedding = ActionEmbedding(env)
         self.device = torch.device('cpu')
@@ -69,22 +69,31 @@ class ActionEncoder(View):
         return self
 
     def update(self, screen_action, format):
-        x = tvf.to_tensor(screen_action[0].copy()).unsqueeze(0).to(self.device)
-        mu, logsigma = self.model.encode(x)
-        a = self.action_embedding.toTensor(screen_action[1]).unsqueeze(0)
-        self.z_list.append(mu)
-        self.a_list.append(a)
+        with torch.no_grad():
+            self.model.eval()
+        x = tvf.to_tensor(screen_action[0].copy()).detach().unsqueeze(0).to(self.device)
+        mu, logsigma = self.model.encoder(x)
+        a = self.action_embedding.toTensor(screen_action[1]).detach()
+
+        obs_n = mu.detach().cpu().numpy()
+        act_n = a.cpu().numpy()
+        act_n = np.expand_dims(act_n, axis=0)
+        obs_act = np.concatenate((obs_n, act_n), axis=1)
+        obs_act = np.expand_dims(obs_act, axis=0)
+
+
+        if self.sess_obs_act is None:
+            self.sess_obs_act = np.empty((0, obs_act.shape[1]), dtype='float32')
+
+        self.sess_obs_act = np.append(self.sess_obs_act, obs_act, axis=0)
+        print(self.sess_obs_act.shape)
 
     def endSession(self):
 
-        z = torch.stack(self.z_list, dim=0)
-        a = torch.stack(self.a_list, dim=0)
-
-        file = open('data/cart/latent/' + self.filename + str(self.session),'wb')
-        pickle.dump((a,z), file=file)
+        file = open('data/spaceinvaders/latent/' + self.filename + str(self.session),'wb')
+        pickle.dump(self.sess_obs_act, file=file)
         self.session += 1
-        self.z_list = []
-        self.a_list = []
+        self.sess_obs_act = None
 
 
 
@@ -94,12 +103,17 @@ if __name__ == '__main__':
     env = gym.make('SpaceInvaders-v4')
     random_policy = RandomPolicy(env)
     rollout = Rollout(env)
-    rollout.registerObserver('input', OpenCV('input'))
-    #rollout.registerObserver('input', ImageVideoWriter('data/video/cart/','cartpole'))
-    rollout.registerObserver('input', ImageFileWriter('data/images/spaceinvaders/fullscreen', 'input', 16384))
+    rollout.registerView('input', OpenCV('input'))
+    #rollout.registerObserver('input', ImageVideoWriter('data/video/spaceinvaders/','random'))
+    #rollout.registerObserver('input', ImageFileWriter('data/images/spaceinvaders/fullscreen', 'input', 16384))
     #cvae = models.ConvVAE.load('conv_run2_cart')
-    #ae = ActionEncoder(cvae, env, 'run').to(device)
-    #rollout.registerObserver('screen_action', ae)
+
+    name = 'atari_v3'
+    #atari_conv = models.AtariConv_v4()
+    atari_conv = Storeable.load(name)
+    atari_conv = atari_conv.eval()
+    ae = ActionEncoder(atari_conv, env, 'run').to(device)
+    rollout.registerView('screen_action', ae)
 
 
     for i_episode in range(100):

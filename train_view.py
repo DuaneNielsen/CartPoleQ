@@ -1,7 +1,7 @@
 import torchvision
-import models
 import torch
-from mentality import Storeable, Observable, SummaryWriterWithGlobal, OpenCV, TensorBoardObservable
+import models
+from mentality import OpenCV, TensorBoard, Storeable
 from tqdm import tqdm
 import torch.nn as nn
 import torchvision.transforms as TVT
@@ -86,16 +86,29 @@ if __name__ == '__main__':
 
     device = torch.device("cuda")
 
-    def registerCV(model):
-        model.registerView('input', OpenCV('input'))
-        model.registerView('output', OpenCV('output'))
 
 
-    atari_conv = models.AtariConv_v2()
-    registerCV(atari_conv)
+    def registerViews(model, run_name):
+        tb = TensorBoard('space_invaders')
+        tb.register(model)
+        model.registerView('input', OpenCV('input',(420,320)))
+        model.registerView('output', OpenCV('output',(420,320)))
 
-    for epoch in tqdm(range(3)):
-        atari_conv.train_model(spaceinvaders_rgb_210_160, 56, device)
+
+    name = 'atari_v5'
+    atari_conv = models.AtariConv_v5()
+    #atari_conv = Storeable.load(name)
+    registerViews(atari_conv, name)
+
+    for epoch in tqdm(range(50)):
+        atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device)
+
+        losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 8, device)
+        l = torch.Tensor(losses)
+        ave_test_loss = l.mean().item()
+        atari_conv.save(name, ave_test_loss)
+
+
 
     #trainer = Train(atari_conv, device, tb, save_name='first_conv_layer_space_invaders_run11')
     #optimizer = torch.optim.SGD(trainer.model.parameters(), lr=0.000000001)

@@ -24,8 +24,12 @@ def conv_output_shape(h_w, kernel_size=1, stride=1, pad=0, dilation=1):
     from math import floor
     if type(kernel_size) is not tuple:
         kernel_size = (kernel_size, kernel_size)
-    h = floor( ((h_w[0] + (2 * pad) - ( dilation * (kernel_size[0] - 1) ) - 1 )/ stride) + 1)
-    w = floor( ((h_w[1] + (2 * pad) - ( dilation * (kernel_size[1] - 1) ) - 1 )/ stride) + 1)
+
+    if type(pad) is not tuple:
+        pad = (pad, pad)
+
+    h = floor( ((h_w[0] + (2 * pad[0]) - ( dilation * (kernel_size[0] - 1) ) - 1 )/ stride) + 1)
+    w = floor( ((h_w[1] + (2 * pad[1]) - ( dilation * (kernel_size[1] - 1) ) - 1 )/ stride) + 1)
     return h, w
 
 def conv_transpose_output_shape(h_w, kernel_size=1, stride=1, pad=0, output_padding=0):
@@ -34,6 +38,23 @@ def conv_transpose_output_shape(h_w, kernel_size=1, stride=1, pad=0, output_padd
     h = (h_w[0] - 1) * stride - (2 * pad) + kernel_size[0] + output_padding
     w = (h_w[1] - 1) * stride - (2 * pad) + kernel_size[1] + output_padding
     return h, w
+
+""" Generates a default index map for nn.MaxUnpool2D operation.
+output_shape: the shape that was put into the nn.MaxPool2D operation
+in terms of nn.MaxUnpool2D this will be the output_shape
+pool_size: the kernel size of the MaxPool2D
+"""
+def default_maxunpool_indices(output_shape, kernel_size, batch_size, channels, device):
+    ph = kernel_size[0]
+    pw = kernel_size[1]
+    h = output_shape[0]
+    w = output_shape[1]
+    ih = output_shape[0] // 2
+    iw = output_shape[1] // 2
+    h_v = torch.arange(ih,dtype=torch.int64, device=device) * pw  * ph * iw
+    w_v = torch.arange(iw,dtype=torch.int64, device=device) * pw
+    h_v = torch.transpose(h_v.unsqueeze(0), 1,0)
+    return (h_v + w_v).expand(batch_size, channels, -1, -1)
 
 class StoreConfig():
     def __init__(self, object_type, args):
@@ -46,9 +67,6 @@ ModelConfig is concerned with initializing, loading and saving the model and par
 """
 
 class Storeable(ABC):
-
-    # needs to be fixed so it's not interruptable in the middle of a save!
-
     def __init__(self, *args):
         self.config = StoreConfig(type(self), args)
 
@@ -56,11 +74,14 @@ class Storeable(ABC):
     def fn(filename):
         return 'data/models/' + filename + '_config.pt', 'data/models/' + filename + '_model.pt'
 
-    def buffer(self, model, test_loss):
-        self.state_dict = model.state_dict()
-        self.test_loss = test_loss
 
-    def save(self, filename):
+
+
+    """ Saves the model
+    if test_loss is set, it will check that the model written has a worse test loss
+    before overwriting it
+    """
+    def save(self, filename, test_loss=None):
 
         try:
             os.makedirs('data/models')
@@ -68,11 +89,27 @@ class Storeable(ABC):
             if e.errno != errno.EEXIST:
                 raise
 
+        config = self.get_config(filename)
+        if config is not None and config.test_loss is not None and config.test_loss < test_loss:
+            print('model not saved as the saved model loss was ' + str(config.test_loss) +
+                      'which was better than ' + str(test_loss))
+            return
+
         config_filename, model_filename = Storeable.fn(filename)
 
         with open(config_filename, 'wb') as output:  # Overwrites any existing file.
             pickle.dump(self.config, output, pickle.HIGHEST_PROTOCOL)
         torch.save(self.state_dict(), model_filename)
+
+    def get_config(self, filename):
+        config_filename, model_filename = Storeable.fn(filename)
+        if Storeable.file_exists(filename):
+            with open(config_filename, 'rb') as inp:
+                config = pickle.load(inp)
+                return config
+        else:
+            return None
+
 
     @staticmethod
     def get_model(config):
@@ -415,11 +452,15 @@ class Trainable(TensorBoardObservable):
     def train_model(self, dataset, batch_size, device, optimizer=None):
         self.to(device)
         self.train()
+        #todo: this optimizer resets each epoch, dont reset each epoch!
         if not optimizer:
             optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         train_set = du.Subset(dataset, range(len(dataset) // 10, len(dataset) -1))
         train_loader = self.loader(train_set, batch_size)
+
         for batch_idx, (data, target) in enumerate(train_loader):
+            if data.shape[0] != batch_size:
+                break
             data = data.to(device)
             optimizer.zero_grad()
             output = self(data, noise=False)
@@ -432,18 +473,25 @@ class Trainable(TensorBoardObservable):
             optimizer.step()
             self.tb_global_step()
 
-    def test(self, dataset, batch_size):
+    def test_model(self, dataset, batch_size, device):
         with torch.no_grad():
-            self.model.eval()
+            self.eval()
+            self.to(device)
             test_set = du.Subset(dataset, range(0,len(dataset)//10))
             test_loader = self.loader(test_set, batch_size)
-            for batch_idx, (data, target) in enumerate(test_loader):
-                data = data.to(self.device)
+            losses = []
 
-                output = self.model(data)
+            for batch_idx, (data, target) in enumerate(test_loader):
+                if data.shape[0] != batch_size:
+                    break
+                data = data.to(device)
+                output = self(data)
                 if type(output) == tuple:
-                    loss = self.model.loss(*output, data)
+                    loss = self.loss(*output, data)
                 else:
-                    loss = self.model.loss(output, data)
+                    loss = self.loss(output, data)
+
+                losses.append(loss.item())
                 self.writeTestLossToTB(loss/data.shape[0])
                 self.tb_global_step()
+            return losses

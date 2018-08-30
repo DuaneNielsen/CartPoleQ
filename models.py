@@ -210,7 +210,7 @@ class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
         return recon, mu, logvar
 
 
-class BaseVAE(nn.Module, Dispatcher, Observable):
+class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
     def __init__(self, encoder, decoder):
         nn.Module.__init__(self)
         Dispatcher.__init__(self)
@@ -229,7 +229,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable):
         if len(encoded) > 2:
             indices = encoded[2]
         z = self.reparameterize(mu, logvar, noise=noise)
-        if indices:
+        if indices is not None:
             decoded = self.decoder(z, indices)
         else:
             decoded = self.decoder(z)
@@ -600,33 +600,41 @@ class AtariConv_v2(BaseVAE, Storeable, MSELoss, Trainable):
             self.bn2 = nn.BatchNorm2d(32)
             self.mp2 = nn.MaxPool2d(2, 2, return_indices=True)
 
-            self.cn3 = nn.Conv2d(32, 32, kernel_size=5, stride=1)
-            self.bn3 = nn.BatchNorm2d(32)
+            self.cn3 = nn.Conv2d(32, 16, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(16)
             self.mp3 = nn.MaxPool2d(2, 2, return_indices=True)
 
-            self.cn4 = nn.Conv2d(32, 16, kernel_size=5, stride=1)
-            self.bn4 = nn.BatchNorm2d(16)
+            self.cn4 = nn.Conv2d(16, 8, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(8)
             self.mp4 = nn.MaxPool2d(2, 2, return_indices=True)
 
+            self.l1 = nn.Linear(432, 256)
+            self.bn5 = nn.BatchNorm1d(256)
 
         def forward(self, x):
             indices = []
 
+            #210, 160, 3 => 206, 156, 32 => 103, 78, 32
             encoded = F.relu(self.bn1(self.cn1(x)))
             encoded, ind = self.mp1(encoded)
             indices.append(ind)
 
+            #103, 78, 32 => 99, 74, 32, => 49, 27, 32
             encoded = F.relu(self.bn2(self.cn2(encoded)))
             encoded, ind = self.mp2(encoded)
             indices.append(ind)
 
+            #49, 27, 32 => 44, 33, 16 => 22, 16, 16
             encoded = F.relu(self.bn3(self.cn3(encoded)))
             encoded, ind = self.mp3(encoded)
             indices.append(ind)
 
+            #22, 16, 16 => 18, 12, 8 => 8, 9, 6
             encoded = F.relu(self.bn4(self.cn4(encoded)))
             encoded, ind = self.mp4(encoded)
             indices.append(ind)
+
+            encoded = F.relu(self.bn5(self.l1(encoded.view(-1, 432))))
 
             return encoded, None, indices
 
@@ -634,11 +642,14 @@ class AtariConv_v2(BaseVAE, Storeable, MSELoss, Trainable):
         def __init__(self):
             nn.Module.__init__(self)
 
-            self.ct4 = nn.ConvTranspose2d(16, 32, kernel_size=5, stride=1)
-            self.bn4 = nn.BatchNorm2d(32)
+            self.l1 = nn.Linear(256, 432)
+            self.bn5 = nn.BatchNorm1d(432)
+
+            self.ct4 = nn.ConvTranspose2d(8, 16, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(16)
             self.up4 = nn.MaxUnpool2d(2, 2)
 
-            self.ct3 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=1)
+            self.ct3 = nn.ConvTranspose2d(16, 32, kernel_size=5, stride=1)
             self.bn3 = nn.BatchNorm2d(32)
             self.up3 = nn.MaxUnpool2d(2, 2)
 
@@ -650,37 +661,354 @@ class AtariConv_v2(BaseVAE, Storeable, MSELoss, Trainable):
             self.bn1 = nn.BatchNorm2d(3)
             self.up1 = nn.MaxUnpool2d(2, 2)
 
+
+
         def forward(self, z, indices):
 
-            decoded = self.up4(z, indices[3], output_size=(18, 12))
+            from mentality import default_maxunpool_indices
+
+            batch_size = z.shape[0]
+            device = z.device
+
+            decoded = F.relu(self.bn5(self.l1(z)))
+            decoded = decoded.view(-1, 8, 9, 6)
+
+            indices[3] = default_maxunpool_indices((18,12), (2,2), batch_size, decoded.shape[1], device)
+            decoded = self.up4(decoded, indices[3], output_size=(18, 12))
             decoded = F.relu(self.bn4(self.ct4(decoded)))
 
+            indices[2] = default_maxunpool_indices((45, 33), (2, 2), batch_size, decoded.shape[1], device)
             decoded = self.up3(decoded, indices[2], output_size=(45, 33))
             decoded = F.relu(self.bn3(self.ct3(decoded)))
 
+            indices[1] = default_maxunpool_indices((99, 74), (2, 2), batch_size, decoded.shape[1], device)
             decoded = self.up2(decoded, indices[1], output_size=(99,74))
             decoded = F.relu(self.bn2(self.ct2(decoded)))
 
+            indices[0] = default_maxunpool_indices((206, 156), (2, 2), batch_size, decoded.shape[1], device)
             decoded = self.up1(decoded, indices[0], output_size=(206,156))
             decoded = self.bn1(self.ct1(decoded))
-            #return F.relu(decoded)
-            return torch.sigmoid(decoded)
+            return F.relu(decoded)
+            #return torch.sigmoid(decoded)
+
+class AtariConv_v3(BaseVAE, Storeable, MSELoss, Trainable):
+    def __init__(self):
+        self.input_shape = (210, 160)
+        encoder = self.Encoder()
+        decoder = self.Decoder()
+        BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
+
+    class Encoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.cn1 = nn.Conv2d(3, 32, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(32)
+            self.mp1 = nn.Conv2d(32, 32, kernel_size=2, stride=2, groups=32)
+
+            self.cn2 = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+            self.mp2 = nn.Conv2d(32, 32, kernel_size=2, stride=2, groups=32)
+
+            self.cn3 = nn.Conv2d(32, 16, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(16)
+            self.mp3 = nn.Conv2d(16, 16, kernel_size=2, stride=2, groups=16)
+
+            self.cn4 = nn.Conv2d(16, 8, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(8)
+            self.mp4 = nn.Conv2d(8, 8, kernel_size=2, stride=2, groups=8)
+
+            self.l1 = nn.Linear(432, 256)
+            self.bn5 = nn.BatchNorm1d(256)
+
+        def forward(self, x):
+            indices = []
+
+            #210, 160, 3 => 206, 156, 32 => 103, 78, 32
+            encoded = F.relu(self.bn1(self.cn1(x)))
+            encoded = self.mp1(encoded)
+
+            #103, 78, 32 => 99, 74, 32, => 49, 37, 32
+            encoded = F.relu(self.bn2(self.cn2(encoded)))
+            encoded = self.mp2(encoded)
+
+            #49, 37, 32 => 45, 33, 16 => 22, 16, 16
+            encoded = F.relu(self.bn3(self.cn3(encoded)))
+            encoded = self.mp3(encoded)
+
+            #22, 16, 16 => 18, 12, 8 => 8, 9, 6
+            encoded = F.relu(self.bn4(self.cn4(encoded)))
+            encoded = self.mp4(encoded)
+
+            encoded = F.relu(self.bn5(self.l1(encoded.view(-1, 432))))
+
+            return encoded, None
+
+    class Decoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+
+            self.l1 = nn.Linear(256, 432)
+            self.bn5 = nn.BatchNorm1d(432)
+
+            self.up4 = nn.ConvTranspose2d(8, 8, kernel_size=2, stride=2)
+            self.ct4 = nn.ConvTranspose2d(8, 16, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(16)
+
+            self.up3 = nn.ConvTranspose2d(16, 16, kernel_size=2, stride=2, output_padding=1)
+            self.ct3 = nn.ConvTranspose2d(16, 32, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(32)
+
+            self.up2 = nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2, output_padding=(1,0))
+            self.ct2 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+
+            self.up1 = nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+            self.ct1 = nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(3)
 
 
+        def forward(self, z):
 
-if __name__ == '__main__':
+            decoded = F.relu(self.bn5(self.l1(z)))
+            decoded = decoded.view(-1, 8, 9, 6)
 
-    i_size = (2, 3, 40, 40)
-    z_size = 2
+            # output_size=(18, 12)
+            decoded = self.up4(decoded)
+            decoded = F.relu(self.bn4(self.ct4(decoded)))
 
-    #atari = AtariLinear(i_size, 2).encoder.grad_check(i_size, batch=True)
-    #atari = AtariLinear(i_size, 2).decoder.grad_check(z_size, batch=True)
+            # output_size=(45, 33)
+            decoded = self.up3(decoded)
+            decoded = F.relu(self.bn3(self.ct3(decoded)))
 
-    AtariConv_v2().encoder.grad_check((Checkable.build_input(i_size),))
+            # output_size=(99,74)
+            decoded = self.up2(decoded)
+            decoded = F.relu(self.bn2(self.ct2(decoded)))
 
-    m = AtariConv_v2()
-    mu, logvar, indx = AtariConv().encoder(torch.randn(i_size))
-    input_var = Checkable.build_input(tuple(mu.shape))
-    AtariConv().decoder.grad_check((input_var, indx))
+            # output_size=(206,156)
+            decoded = self.up1(decoded)
+            decoded = self.bn1(self.ct1(decoded))
+            return F.relu(decoded)
 
 
+class AtariConv_v4(BaseVAE, Storeable, MSELoss, Trainable):
+    def __init__(self):
+        self.input_shape = (210, 160)
+        encoder = self.Encoder()
+        decoder = self.Decoder()
+        BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
+
+    class Encoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.cn1 = nn.Conv2d(3, 32, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(32)
+            self.mp1 = nn.Conv2d(32, 32, kernel_size=2, stride=2)
+
+            self.cn2 = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+            self.mp2 = nn.Conv2d(32, 32, kernel_size=2, stride=2)
+
+            self.cn3 = nn.Conv2d(32, 16, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(16)
+            self.mp3 = nn.Conv2d(16, 16, kernel_size=2, stride=2)
+
+            self.cn4 = nn.Conv2d(16, 8, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(8)
+            self.mp4 = nn.Conv2d(8, 8, kernel_size=2, stride=2)
+
+            self.cn5 = nn.Conv2d(8, 8, kernel_size=2, stride=2)
+            self.bn5 = nn.BatchNorm2d(8)
+
+
+            self.l1 = nn.Linear(96, 64)
+            self.lbn1 = nn.BatchNorm1d(64)
+
+        def forward(self, x):
+
+            #210, 160, 3 => 206, 156, 32 => 103, 78, 32
+            encoded = F.relu(self.bn1(self.cn1(x)))
+            encoded = self.mp1(encoded)
+
+            #103, 78, 32 => 99, 74, 32, => 49, 37, 32
+            encoded = F.relu(self.bn2(self.cn2(encoded)))
+            encoded = self.mp2(encoded)
+
+            #49, 37, 32 => 45, 33, 16 => 22, 16, 16
+            encoded = F.relu(self.bn3(self.cn3(encoded)))
+            encoded = self.mp3(encoded)
+
+            #22, 16, 16 => 18, 12, 8 => 8, 9, 6
+            encoded = F.relu(self.bn4(self.cn4(encoded)))
+            encoded = self.mp4(encoded)
+
+            #8, 9, 6 => 8, 4, 3
+            encoded = self.cn5(encoded)
+            encoded = F.relu(self.bn5(encoded))
+
+            encoded = F.relu(self.lbn1(self.l1(encoded.view(-1, 96))))
+
+            return encoded, None
+
+    class Decoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+
+            self.l1 = nn.Linear(64, 96)
+            self.lbn1 = nn.BatchNorm1d(96)
+
+            self.ct5 = nn.ConvTranspose2d(8, 8, kernel_size=2, stride=2, output_padding=(1,0))
+            self.bn5 = nn.BatchNorm2d(8)
+
+            self.up4 = nn.ConvTranspose2d(8, 8, kernel_size=2, stride=2)
+            self.ct4 = nn.ConvTranspose2d(8, 16, kernel_size=5, stride=1)
+            self.bn4 = nn.BatchNorm2d(16)
+
+            self.up3 = nn.ConvTranspose2d(16, 16, kernel_size=2, stride=2, output_padding=1)
+            self.ct3 = nn.ConvTranspose2d(16, 32, kernel_size=5, stride=1)
+            self.bn3 = nn.BatchNorm2d(32)
+
+            self.up2 = nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2, output_padding=(1,0))
+            self.ct2 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=1)
+            self.bn2 = nn.BatchNorm2d(32)
+
+            self.up1 = nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+            self.ct1 = nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1)
+            self.bn1 = nn.BatchNorm2d(3)
+
+
+        def forward(self, z):
+
+            decoded = F.relu(self.lbn1(self.l1(z)))
+            decoded = decoded.view(-1, 8, 4, 3)
+
+            # output_size (8, 9, 6)
+            decoded = F.relu(self.bn5(self.ct5(decoded)))
+
+            # output_size=(18, 12)
+            decoded = self.up4(decoded)
+            decoded = F.relu(self.bn4(self.ct4(decoded)))
+
+            # output_size=(45, 33)
+            decoded = self.up3(decoded)
+            decoded = F.relu(self.bn3(self.ct3(decoded)))
+
+            # output_size=(99,74)
+            decoded = self.up2(decoded)
+            decoded = F.relu(self.bn2(self.ct2(decoded)))
+
+            # output_size=(206,156)
+            decoded = self.up1(decoded)
+            decoded = self.bn1(self.ct1(decoded))
+            return F.relu(decoded)
+
+class FireEncoder(nn.Module, Checkable):
+    def __init__(self, channels, padding=0):
+        nn.Module.__init__(self)
+        self.cn1 = nn.Conv2d(3, channels, kernel_size=3, stride=1, padding=1)
+        self.cn1bn = nn.BatchNorm2d(channels)
+        self.ds1 = nn.Conv2d(channels, channels, kernel_size=2, stride=2, padding=padding)
+        self.ds1bn = nn.BatchNorm2d(channels)
+        self.rn1 = nn.Conv2d(channels, 3, kernel_size=1, stride=1)
+        self.rn1bn = nn.BatchNorm2d(3)
+
+    def forward(self, x):
+        encoded = F.relu(self.cn1bn(self.cn1(x)))
+        encoded = F.relu(self.ds1bn(self.ds1(encoded)))
+        encoded = F.relu(self.rn1bn(self.rn1(encoded)))
+        return encoded
+
+class FireDecoder(nn.Module, Checkable):
+    def __init__(self, channels, padding=0, output_padding=0):
+        nn.Module.__init__(self)
+        self.en1 = nn.Conv2d(3, channels, kernel_size=1, stride=1)
+        self.en1bn = nn.BatchNorm2d(channels)
+        self.up1 = nn.ConvTranspose2d(channels, channels, kernel_size=2, stride=2, padding=padding, output_padding=output_padding)
+        self.up1bn = nn.BatchNorm2d(channels)
+        self.cn1 = nn.ConvTranspose2d(channels, 3, kernel_size=3, stride=1, padding=1)
+        self.cn1bn = nn.BatchNorm2d(3)
+
+
+    def forward(self, y):
+        decoded = F.relu(self.en1bn(self.en1(y)))
+        decoded = F.relu(self.up1bn(self.up1(decoded)))
+        decoded = F.relu(self.cn1bn(self.cn1(decoded)))
+        return decoded
+
+#todo we are good to add another layer
+"""Based on SqueezeNet
+https://arxiv.org/abs/1602.07360
+"""
+class AtariConv_v5(BaseVAE, MSELoss, Storeable):
+    def __init__(self):
+        self.input_shape = (210, 160)
+        encoder = self.Encoder()
+        decoder = self.Decoder()
+        BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
+
+    class Encoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.fe1 = FireEncoder(64)
+            self.fe2 = FireEncoder(64, padding=(1,0))
+
+        def forward(self, x):
+            # 210, 150 -> 105 80
+            encoded = self.fe1(x)
+            # 105 80 -> 52, 40
+            encoded = self.fe2(encoded)
+            return encoded, None
+
+    class Decoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.fd1 = FireDecoder(64)
+            self.fd2 = FireDecoder(64, padding=(1,0), output_padding=(1,0))
+
+        def forward(self, z):
+            decoded = self.fd2(z)
+            decoded = self.fd1(decoded)
+            return decoded
+
+"""Based on SqueezeNet
+https://arxiv.org/abs/1602.07360
+"""
+class AtariConv_v6(BaseVAE, MSELoss, Storeable):
+    def __init__(self):
+        self.input_shape = (210, 160)
+        encoder = self.Encoder()
+        decoder = self.Decoder()
+        BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
+
+    class Encoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.fe1 = FireEncoder(64)
+            self.fe2 = FireEncoder(64, padding=(1,0))
+            self.fe3 = FireEncoder(64)
+
+        def forward(self, x):
+            # 210, 150 -> 105 80
+            encoded = self.fe1(x)
+            # 105 80 -> 52, 40
+            encoded = self.fe2(encoded)
+            # 52, 40 ->
+            encoded = self.fe3(encoded)
+
+            return encoded, None
+
+    class Decoder(nn.Module, Checkable):
+        def __init__(self):
+            nn.Module.__init__(self)
+            self.fd1 = FireDecoder(64)
+            self.fd2 = FireDecoder(64, padding=(1,0), output_padding=(1,0))
+            self.fd3 = FireDecoder(64)
+
+        def forward(self, z):
+            decoded = self.fd3(z)
+            decoded = self.fd2(decoded)
+            decoded = self.fd1(decoded)
+            return decoded
