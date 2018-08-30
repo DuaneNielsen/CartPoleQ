@@ -1,4 +1,3 @@
-import unittest
 from unittest import TestCase
 import models
 import torch
@@ -6,7 +5,7 @@ import torchvision
 from torchvision import transforms as TVT
 from mentality import TensorBoard, OpenCV
 from tqdm import tqdm
-
+import os
 
 
 def registerViews(model, run_name):
@@ -17,10 +16,15 @@ def registerViews(model, run_name):
 
 
 class TestModels(TestCase):
+    def setUp(self):
+        self.data_path = os.environ.get('DATA_PATH')
+        if self.data_path is None:
+            self.data_path = 'c:\data'
 
     def test_first_model(self):
+        print(self.data_path)
         spaceinvaders_rgb_210_160 = torchvision.datasets.ImageFolder(
-            root='data/images/spaceinvaders',
+            root= self.data_path + '/spaceinvaders/images/raw/',
             transform=TVT.Compose([TVT.ToTensor()])
         )
 

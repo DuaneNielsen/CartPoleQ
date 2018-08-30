@@ -7,23 +7,6 @@ import torch.nn as nn
 import torchvision.transforms as TVT
 
 
-#tb = SummaryWriterWithGlobal('default')
-
-#run_name = save_name if save_name else 'default'
-
-
-# if issubclass(type(model), Storeable) and save_name:
-#     if Storeable.file_exists(save_name):
-#         self.model = Storeable.load(save_name)
-# else:
-#     self.model.apply(self.weights_init)
-#
-
-
-# if issubclass(type(self.model), models.Storeable) and self.save_name:
-#     self.model.save(self.save_name)
-
-
 @staticmethod
 # custom weights initialization called on netG and netD
 def weights_init(m):
@@ -34,44 +17,49 @@ def weights_init(m):
 
 if __name__ == '__main__':
 
+    import os
+    data_path = os.environ.get('DATA_PATH')
+    if data_path is None:
+        data_path = 'c:\data'
+
     cartpole_rgb_400_600 = torchvision.datasets.ImageFolder(
-        root='data/images/',
+        root=data_path + '/cartpole/images/raw',
         transform=TVT.Compose([TVT.ToTensor()])
     )
 
     cartpole_rgb_100_150 = torchvision.datasets.ImageFolder(
-        root='data/images/cart',
+        root=data_path + '/cartpole/images/raw',
         transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
     )
 
     cartpole_greycale_28_28 = torchvision.datasets.ImageFolder(
-        root='data/images/',
+        root=data_path + '/cartpole/images/raw',
         transform=TVT.Compose([TVT.Resize((28,28)),TVT.Grayscale(1),TVT.ToTensor()])
     )
 
     cartpole_rgb_32_48 = torchvision.datasets.ImageFolder(
-        root='data/images/',
+        root=data_path + '/cartpole/images/raw',
         transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
     )
 
     spaceinvaders_rgb_210_160 = torchvision.datasets.ImageFolder(
-        root='data/images/spaceinvaders',
+        root=data_path + '/spaceinvaders/images/raw',
         transform=TVT.Compose([TVT.ToTensor()])
     )
 
     spaceinvaders_rgb_100_150 = torchvision.datasets.ImageFolder(
-        root='data/images/spaceinvaders',
+        root=data_path + '/spaceinvaders/images/raw',
         transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
     )
 
     spaceinvaders_rgb_32_48 = torchvision.datasets.ImageFolder(
-        root='data/images/spaceinvaders',
+        root=data_path + '/spaceinvaders/images/raw',
         transform=TVT.Compose([TVT.Resize((32,48)),TVT.ToTensor()])
     )
 
     small = (84, 64)
     spaceinvaders_grey_small = torchvision.datasets.ImageFolder(
-        root='data/images/spaceinvaders',
+        root=data_path + '/spaceinvaders/images/raw',
         transform=TVT.Compose([TVT.Grayscale(1), TVT.Resize(small), TVT.ToTensor()])
     )
 

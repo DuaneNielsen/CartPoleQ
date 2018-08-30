@@ -991,7 +991,7 @@ class AtariConv_v6(BaseVAE, MSELoss, Storeable):
             self.fe3 = FireEncoder(64)
 
         def forward(self, x):
-            # 210, 150 -> 105 80
+            # 210, 160 -> 105 80
             encoded = self.fe1(x)
             # 105 80 -> 52, 40
             encoded = self.fe2(encoded)
