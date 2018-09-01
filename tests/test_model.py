@@ -10,9 +10,9 @@ import os
 
 class JenkinsConfig:
     def __init__(self):
-        self.GIT_COMMIT = os.environ.get('GIT_COMMIT')
-        self.DATA_PATH = os.environ.get('DATA_PATH', 'c:\data')
-        self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda')
+        self.GIT_COMMIT = os.environ.get('GIT_COMMIT').replace('"', '')
+        self.DATA_PATH = os.environ.get('DATA_PATH', 'c:\data').replace('"', '')
+        self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda').replace('"', '')
 
     def run_id_string(self, model):
         return self.GIT_COMMIT + '/' + str(model.config) if self.GIT_COMMIT is not None else str(model.config)
