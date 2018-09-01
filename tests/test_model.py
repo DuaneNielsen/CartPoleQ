@@ -58,7 +58,7 @@ class TestModels(TestCase):
             registerViews(atari_conv, run_name)
             optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
-            for epoch in tqdm(range(1)):
+            for epoch in tqdm(range(6)):
                 atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device, optimizer=optimizer)
 
                 losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
