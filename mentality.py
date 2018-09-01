@@ -62,6 +62,14 @@ class StoreConfig():
         self.type = object_type
         self.test_loss = None
 
+    def __str__(self):
+        if self.params is not None and len(self.params) > 0:
+            string = self.type.__name__  + '/' + str(self.params)
+        else:
+            string = + str(self.type).__name__
+        return string
+
+
 """
 ModelConfig is concerned with initializing, loading and saving the model and params
 """
@@ -71,20 +79,28 @@ class Storeable(ABC):
         self.config = StoreConfig(type(self), args)
 
     @staticmethod
-    def fn(filename):
-        return 'data/models/' + filename + '_config.pt', 'data/models/' + filename + '_model.pt'
+    def fn(filename, data_dir=None):
+        if data_dir is None:
+            data_dir = 'data/models/'
 
+        model_dir = data_dir + '/models/'
 
+        return model_dir + filename + '_config.pt', model_dir + filename + '_model.pt'
 
 
     """ Saves the model
-    if test_loss is set, it will check that the model written has a worse test loss
+    if test_loss is set, it will check that the model on disk has a worse test loss
     before overwriting it
     """
-    def save(self, filename, test_loss=None):
+    def save(self, filename, data_dir=None, test_loss=None):
+
+        if data_dir is None:
+            data_dir = 'data'
+
+        model_dir = data_dir + '/models/'
 
         try:
-            os.makedirs('data/models')
+            os.makedirs(model_dir)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -95,9 +111,11 @@ class Storeable(ABC):
                       'which was better than ' + str(test_loss))
             return
 
-        config_filename, model_filename = Storeable.fn(filename)
+        config_filename, model_filename = Storeable.fn(filename, data_dir)
 
-        with open(config_filename, 'wb') as output:  # Overwrites any existing file.
+        os.makedirs(os.path.dirname(config_filename), exist_ok=True)
+
+        with open(config_filename, 'wb+') as output:  # Overwrites any existing file.
             pickle.dump(self.config, output, pickle.HIGHEST_PROTOCOL)
         torch.save(self.state_dict(), model_filename)
 

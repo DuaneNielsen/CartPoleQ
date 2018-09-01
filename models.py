@@ -229,6 +229,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
         if len(encoded) > 2:
             indices = encoded[2]
         z = self.reparameterize(mu, logvar, noise=noise)
+        self.updateObservers('z', z[0].data)
         if indices is not None:
             decoded = self.decoder(z, indices)
         else:
@@ -976,39 +977,59 @@ class AtariConv_v5(BaseVAE, MSELoss, Storeable):
 https://arxiv.org/abs/1602.07360
 """
 class AtariConv_v6(BaseVAE, MSELoss, Storeable):
-    def __init__(self):
+    def __init__(self, filter_stack=None):
         self.input_shape = (210, 160)
-        encoder = self.Encoder()
-        decoder = self.Decoder()
+        if filter_stack is None:
+            filter_stack = [64, 64, 64, 64, 64]
+        encoder = self.Encoder(filter_stack)
+        decoder = self.Decoder(filter_stack)
         BaseVAE.__init__(self, encoder, decoder)
-        Storeable.__init__(self)
+        Storeable.__init__(self, filter_stack)
+
+
 
     class Encoder(nn.Module, Checkable):
-        def __init__(self):
+        def __init__(self, filter_stack):
             nn.Module.__init__(self)
-            self.fe1 = FireEncoder(64)
-            self.fe2 = FireEncoder(64, padding=(1,0))
-            self.fe3 = FireEncoder(64)
+            self.fe1 = FireEncoder(filter_stack[0])
+            self.fe2 = FireEncoder(filter_stack[1], padding=(1,0))
+            self.fe3 = FireEncoder(filter_stack[2], padding=(1,0))
+            self.fe4 = FireEncoder(filter_stack[3], padding=(1, 0))
+            self.fe5 = FireEncoder(filter_stack[4], padding=(0, 0))
 
         def forward(self, x):
             # 210, 160 -> 105 80
             encoded = self.fe1(x)
             # 105 80 -> 52, 40
             encoded = self.fe2(encoded)
-            # 52, 40 ->
+            # 52, 40 -> 26, 20
             encoded = self.fe3(encoded)
+            # 13, 10
+            encoded = self.fe4(encoded)
+            # 8, 5
+            encoded = self.fe5(encoded)
 
             return encoded, None
 
     class Decoder(nn.Module, Checkable):
-        def __init__(self):
+        def __init__(self, filter_stack):
             nn.Module.__init__(self)
-            self.fd1 = FireDecoder(64)
-            self.fd2 = FireDecoder(64, padding=(1,0), output_padding=(1,0))
-            self.fd3 = FireDecoder(64)
+            self.fd1 = FireDecoder(filter_stack[0])
+            self.fd2 = FireDecoder(filter_stack[1], padding=(1,0), output_padding=(1,0))
+            self.fd3 = FireDecoder(filter_stack[2], padding=(1,0), output_padding=(1,0))
+            self.fd4 = FireDecoder(filter_stack[3], padding=(1,0), output_padding=(1,0))
+            self.fd5 = FireDecoder(filter_stack[4], padding=(0, 0), output_padding=(0, 0))
 
         def forward(self, z):
-            decoded = self.fd3(z)
+            # 8, 5 -> 15, 10
+            decoded = self.fd5(z)
+            # 17, 10 -> 29, 20
+            decoded = self.fd4(decoded)
+            # 26, 20 -> 52, 40
+            decoded = self.fd3(decoded)
+            # 52, 40 -> 103, 80
             decoded = self.fd2(decoded)
+
             decoded = self.fd1(decoded)
+
             return decoded
