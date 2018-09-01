@@ -17,6 +17,9 @@ class JenkinsConfig:
     def run_id_string(self, model):
         return self.GIT_COMMIT + '/' + str(model.config) if self.GIT_COMMIT is not None else str(model.config)
 
+    def device(self):
+        return torch.device(self.TORCH_DEVICE)
+
     def __str__(self):
         return 'DATA_PATH ' +  str(self.DATA_PATH) + \
                'GIT_COMMIT ' + str(self.GIT_COMMIT) + \
@@ -32,7 +35,7 @@ class TestModels(TestCase):
     def test_first_model(self):
         jenkins_config = JenkinsConfig()
         print(jenkins_config)
-        device = jenkins_config.TORCH_DEVICE
+        device = jenkins_config.device()
 
         spaceinvaders_rgb_210_160 = torchvision.datasets.ImageFolder(
             root= jenkins_config.DATA_PATH + '/spaceinvaders/images/raw/',
