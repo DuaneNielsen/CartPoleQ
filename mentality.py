@@ -250,6 +250,9 @@ To use, make sure the object has a Dispatcher
 
 class Observable:
 
+    def updateObserversWithImage(self, tag, image, format=None):
+        self.updateObservers(tag, image, {'func':'image','name': tag, 'format': format})
+
     def updateObservers(self, tag, data, metadata=None):
         if hasattr(self, 'pipelineView'):
             if tag not in self.pipelineView:

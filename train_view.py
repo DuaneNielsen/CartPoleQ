@@ -77,25 +77,20 @@ if __name__ == '__main__':
 
 
     def registerViews(model):
-        pass
-        #model.registerView('input', OpenCV('input',(320,420)))
-        #model.registerView('output', OpenCV('output',(320,420)))
-        #model.registerView('z', OpenCV('z',(320,420)))
-
+        tb = TensorBoard(comment=str(atari_conv.config))
+        tb.register(atari_conv)
+        model.registerView('input', OpenCV('input',(320,420)))
+        model.registerView('output', OpenCV('output',(320,420)))
+        model.registerView('z', OpenCV('z',(320,420)))
 
 
     atari_conv = models.AtariConv_v6()
     #atari_conv = Storeable.load(name)
     registerViews(atari_conv)
-    tb = TensorBoard(comment=str(atari_conv.config))
-    tb.register(atari_conv)
 
     optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
     for epoch in tqdm(range(50)):
-        import time
-        start = time.time()
-
         atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device, optimizer=optimizer)
 
         losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)

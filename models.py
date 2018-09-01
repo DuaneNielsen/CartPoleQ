@@ -221,7 +221,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
     def forward(self, x, noise=True):
         input_shape = x.shape
         indices = None
-        self.updateObservers('input', x[0], {'func':'image','name':'input'})
+        self.updateObserversWithImage('input', x[0])
         encoded = self.encoder(x)
         mu = encoded[0]
         logvar = encoded[1]
@@ -229,7 +229,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
         if len(encoded) > 2:
             indices = encoded[2]
         z = self.reparameterize(mu, logvar, noise=noise)
-        self.updateObservers('z', z[0].data, {'func':'image','name':'z'})
+        self.updateObserversWithImage('z', z[0].data)
         if indices is not None:
             decoded = self.decoder(z, indices)
         else:
@@ -237,7 +237,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
 
         # should probably make decoder return same shape as encoder
         decoded = decoded.view(input_shape)
-        self.updateObservers('output', decoded[0].data, {'func':'image','name':'output'})
+        self.updateObserversWithImage('output', decoded[0].data)
         return decoded, mu, logvar
 
     def reparameterize(self, mu, logvar, noise=True):
