@@ -77,64 +77,33 @@ if __name__ == '__main__':
 
 
     def registerViews(model):
-        tb = TensorBoard(str(model.config))
-        tb.register(model)
-        model.registerView('input', OpenCV('input',(320,420)))
-        model.registerView('output', OpenCV('output',(320,420)))
-        model.registerView('z', OpenCV('z',(320,420)))
+        pass
+        #model.registerView('input', OpenCV('input',(320,420)))
+        #model.registerView('output', OpenCV('output',(320,420)))
+        #model.registerView('z', OpenCV('z',(320,420)))
 
 
-    name = 'atari_v6'
+
     atari_conv = models.AtariConv_v6()
     #atari_conv = Storeable.load(name)
     registerViews(atari_conv)
+    tb = TensorBoard(comment=str(atari_conv.config))
+    tb.register(atari_conv)
 
     optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
     for epoch in tqdm(range(50)):
+        import time
+        start = time.time()
+
         atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device, optimizer=optimizer)
 
         losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
         l = torch.Tensor(losses)
         ave_test_loss = l.mean().item()
-        atari_conv.save(name, ave_test_loss)
+        atari_conv.save(str(atari_conv.config), data_path, ave_test_loss)
 
 
 
-    #trainer = Train(atari_conv, device, tb, save_name='first_conv_layer_space_invaders_run11')
-    #optimizer = torch.optim.SGD(trainer.model.parameters(), lr=0.000000001)
-    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 600)
-    #optimizer = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
-    #scheduler = None
-    #trainer.retest(dataset=spaceinvaders_rgb_210_160, batch_size=56, epochs=1)
-
-    #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
-    #trainer = Train(three_linear, device, tb)
-    #trainer.train_test(dataset=mnist_rgb_32_48, batch_size=256, epochs=10)
-
-    #conv = models.ConvVAEFixed((400,600))
-    #trainer = Train(conv, device, save_name='conv_run4_cart')
-    #trainer.train_test(dataset=cartpole_rgb_400_600, batch_size=1, epochs=600)
-    #trainer.retest(dataset=cartpole_rgb_400_600, batch_size=16, epochs=10)
-
-    #conv_100_150 = models.ConvVAEFixed((100, 150))
-    #trainer = Train(conv_100_150, device, save_name='conv_100_150_run2_cart')
-    #trainer.train_test(dataset=cartpole_rgb_100_150, batch_size=256, epochs=600)
-
-    #lin_atari = models.AtariConv(small, 64)
-    #trainer = Train(lin_atari, device, save_name='lin_atari_run1_spaceinvaders')
-    #trainer.train_test(dataset=spaceinvaders_grey_small, batch_size=2056, epochs=20)
-
-    #lin_atari = models.AtariLinear((32, 48), 32)
-    #simple = models.PerceptronVAE((32, 48), 400, 32)
-    #trainer = Train(lin_atari, device, tb)
-    #trainer.train_test(dataset=mnist_g_32_48, batch_size=2056, epochs=20)
 
 
-    #three_linear = models.ThreeLayerLinearVAE(INPUT_DIMS, Z_DIMS)
-    #trainer = Train(three_linear, device, save_name='3linear_run1_spaceinvaders')
-    #trainer.train_test(dataset=spaceinvaders_rgb_32_48, batch_size=1024, epochs=600)
-
-    #conv4_100_150 = models.ConvVAE4Fixed((100, 150))
-    #trainer = Train(conv4_100_150, device, save_name='conv_100_150_run3_spaceinv')
-    #trainer.train_test(dataset=spaceinvaders_rgb_100_150, batch_size=128, epochs=600)

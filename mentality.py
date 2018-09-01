@@ -15,6 +15,7 @@ import torchvision.transforms.functional as TVF
 from PIL import Image
 import imageio
 import torch.utils.data as du
+import time
 
 """
 Utility function for computing output of convolutions
@@ -286,7 +287,10 @@ class ImageVideoWriter(View):
         self.number = 0
         self.writer = None
 
-    def update(self, screen, in_format=None):
+    def update(self, screen, metadata=None):
+
+        in_format = metadata['format'] if metadata is not None and 'format' in metadata else None
+
         if not self.writer:
             self.number += 1
             file = self.directory + self.prefix + str(self.number) + '.mp4'
@@ -309,7 +313,9 @@ class ImageFileWriter(View):
         self.num_images = num_images
         self.imagenumber = 0
 
-    def update(self, screen, in_format=None):
+    def update(self, screen, metadata=None):
+
+        in_format = metadata['format'] if metadata is not None and 'format' in metadata else None
 
         frame = NumpyRGBWrapper(screen, in_format).numpyRGB
         Image.fromarray(frame).save(self.directory + '/' + self.prefix + str(self.imagenumber) + '.png')
@@ -324,7 +330,9 @@ class OpenCV(View):
         self.title = title
         self.screen_resolution = screen_resolution
 
-    def update(self, screen, format=None):
+    def update(self, screen, metadata=None):
+
+        format = metadata['format'] if metadata is not None and 'format' in metadata else None
 
         frame = NumpyRGBWrapper(screen, format)
         frame = frame.getImage()
@@ -347,7 +355,7 @@ class Plotter():
         if input == 'numpyRGB':
             self.C = lambda x : x
 
-    def update(self, screen):
+    def update(self, screen, metadata=None):
 
         plt.figure(self.figure)
 
@@ -363,20 +371,28 @@ class Plotter():
 
 
 class TensorBoard(View, SummaryWriter):
-    def __init__(self, comment='default'):
+    def __init__(self, run=None, comment='default', image_freq=100):
         View.__init__(self)
-        SummaryWriter.__init__(self, comment=comment)
+        SummaryWriter.__init__(self, run, comment)
+        self.image_freq = image_freq
         self.global_step = 0
-        self.dispatch = {'tb_step': self.step, 'tb_scalar':self.scalar}
+        self.dispatch = {'tb_step': self.step, 'tb_scalar':self.scalar, 'image':self.image}
 
     def register(self, model):
         model.registerView('tb_step', self)
         model.registerView('tb_training_loss', self)
         model.registerView('tb_test_loss', self)
+        model.registerView('input', self)
+        model.registerView('output', self)
+        model.registerView('z', self)
+        model.registerView('tb_train_time', self)
+        model.registerView('tb_train_time_per_item', self)
+
 
     def update(self, data, metadata):
         func = self.dispatch.get(metadata['func'])
         func(data, metadata)
+
 
     def step(self, data, metadata):
         self.global_step += 1
@@ -384,6 +400,9 @@ class TensorBoard(View, SummaryWriter):
     def scalar(self, value, metadata):
         self.add_scalar(metadata['name'], value, self.global_step)
 
+    def image(self, value, metadata):
+        if self.global_step % self.image_freq == 0:
+            self.add_image(metadata['name'], value, self.global_step)
 
 """ Convenience methods for dispatch to tensorboard
 requires that the object also inherit Observable
@@ -407,6 +426,10 @@ class TensorBoardObservable:
     def writeTestLossToTB(self, loss):
         self.writeScalarToTB('tb_test_loss', loss, 'loss/test')
 
+    def writePerformanceToTB(self, time, batch_size):
+        self.writeScalarToTB('tb_train_time', time, 'perf/train_time_per_batch')
+        if batch_size != 0:
+            self.writeScalarToTB('tb_train_time_per_item', time/batch_size, 'perf/train_time_per_item')
 
 class SummaryWriterWithGlobal(SummaryWriter):
     def __init__(self, comment):
@@ -477,6 +500,7 @@ class Trainable(TensorBoardObservable):
         train_loader = self.loader(train_set, batch_size)
 
         for batch_idx, (data, target) in enumerate(train_loader):
+            start = time.time()
             if data.shape[0] != batch_size:
                 break
             data = data.to(device)
@@ -490,6 +514,9 @@ class Trainable(TensorBoardObservable):
             loss.backward()
             optimizer.step()
             self.tb_global_step()
+            stop = time.time()
+            loop_time = stop - start
+            self.writePerformanceToTB(loop_time, data.shape[0])
 
     def test_model(self, dataset, batch_size, device):
         with torch.no_grad():
@@ -500,6 +527,7 @@ class Trainable(TensorBoardObservable):
             losses = []
 
             for batch_idx, (data, target) in enumerate(test_loader):
+                start = time.time()
                 if data.shape[0] != batch_size:
                     break
                 data = data.to(device)
@@ -512,4 +540,8 @@ class Trainable(TensorBoardObservable):
                 losses.append(loss.item())
                 self.writeTestLossToTB(loss/data.shape[0])
                 self.tb_global_step()
+                stop = time.time()
+                loop_time = stop - start
+                self.writePerformanceToTB(loop_time, data.shape[0])
+
             return losses
