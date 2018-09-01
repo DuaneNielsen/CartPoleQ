@@ -18,12 +18,12 @@ class JenkinsConfig:
         return self.GIT_COMMIT + '/' + str(model.config) if self.GIT_COMMIT is not None else str(model.config)
 
     def device(self):
-        return torch.device(self.TORCH_DEVICE)
+        return torch.device(str(self.TORCH_DEVICE))
 
     def __str__(self):
         return 'DATA_PATH ' +  str(self.DATA_PATH) + \
-               'GIT_COMMIT ' + str(self.GIT_COMMIT) + \
-               'TORCH_DIVICE ' + str(self.TORCH_DEVICE)
+               ' GIT_COMMIT ' + str(self.GIT_COMMIT) + \
+               ' TORCH_DIVICE ' + str(self.TORCH_DEVICE)
 
 def registerViews(model, tb_string):
     tb = TensorBoard(tb_string)
