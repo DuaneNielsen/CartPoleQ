@@ -17,7 +17,7 @@ class JenkinsConfig:
         self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda').replace('"', '')
 
     def run_id_string(self, model):
-        return self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' + str(model.config)
+        return self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' + str(model.metadata)
 
     def device(self):
         return torch.device(str(self.TORCH_DEVICE))
@@ -46,10 +46,10 @@ class TestModels(TestCase):
 
         filter_stacks_to_test = []
         filter_stacks_to_test.append([64, 64, 64, 64, 64])
-        filter_stacks_to_test.append([16, 32, 64, 64, 64])
-        filter_stacks_to_test.append([64, 64, 64, 16, 32])
-        filter_stacks_to_test.append([64, 64, 64, 32, 16])
-        filter_stacks_to_test.append([64, 32, 16, 32, 64])
+        filter_stacks_to_test.append([32, 64, 256, 256, 256])
+        filter_stacks_to_test.append([32, 64, 256, 512, 512])
+        filter_stacks_to_test.append([32, 64, 256, 512, 1024])
+        filter_stacks_to_test.append([32, 64, 256, 512, 2056])
 
         for filter_stack in filter_stacks_to_test:
 
@@ -58,7 +58,7 @@ class TestModels(TestCase):
             registerViews(atari_conv, run_name)
             optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
-            for epoch in tqdm(range(6)):
+            for epoch in tqdm(range(10)):
                 atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device, optimizer=optimizer)
 
                 losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
