@@ -17,7 +17,7 @@ class JenkinsConfig:
         self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda').replace('"', '')
 
     def run_id_string(self, model):
-        return self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' + str(model.metadata)
+        return 'runs/' + self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' + str(model.metadata)
 
     def device(self):
         return torch.device(str(self.TORCH_DEVICE))
