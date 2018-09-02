@@ -63,7 +63,7 @@ class TestModels(TestCase):
 
                 losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
                 l = torch.Tensor(losses)
-                atari_conv.metadata['ave_test_loss'] = l.mean().item()
+                atari_conv.metadata.data['ave_test_loss'] = l.mean().item()
                 atari_conv.save(data_dir=jenkins_config.DATA_PATH)
 
 
