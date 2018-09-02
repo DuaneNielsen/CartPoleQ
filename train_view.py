@@ -47,6 +47,9 @@ if __name__ == '__main__':
         transform=TVT.Compose([TVT.ToTensor()])
     )
 
+    import torch.utils.data as du
+    dev_set = du.Subset(spaceinvaders_rgb_210_160, range(0,320))
+
     spaceinvaders_rgb_100_150 = torchvision.datasets.ImageFolder(
         root=data_path + '/spaceinvaders/images/raw',
         transform=TVT.Compose([TVT.Resize((100,150)),TVT.ToTensor()])
@@ -85,19 +88,22 @@ if __name__ == '__main__':
 
 
 
-    atari_conv = models.AtariConv_v6([32, 64, 256, 1024, 2056])
+    #atari_conv = models.AtariConv_v6([32, 64, 256, 1024, 2056])
+    atari_conv = models.AtariConv_v6([32, 64, 256, 1024, 1024])
     #atari_conv = Storeable.load(name)
     registerViews(atari_conv)
 
     optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
-    for epoch in tqdm(range(1)):
-        atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device, optimizer=optimizer)
 
-        losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
+    for epoch in tqdm(range(10)):
+        atari_conv.train_model(dev_set, 24, device, optimizer=optimizer)
+
+        losses = atari_conv.test_model(dev_set, 24, device)
         l = torch.Tensor(losses)
-        ave_test_loss = l.mean().item()
-        atari_conv.save(str(atari_conv.metadata), data_path, ave_test_loss)
+        atari_conv.metadata.data['ave_test_loss'] = l.mean().item()
+        print (l.mean().item())
+        atari_conv.save(data_dir='c:\data')
 
 
 

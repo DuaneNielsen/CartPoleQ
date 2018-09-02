@@ -1,7 +1,7 @@
 from unittest import TestCase
 from models import AtariConv_v6
 from mentality import Storeable
-
+from mentality import ModelDb
 
 class Restoreable(Storeable):
     def __init__(self, one, two):
@@ -46,3 +46,14 @@ class TestStorable(TestCase):
         model.save('8834739821','c:\data')
         model = Storeable.load('8834739821','c:\data')
         assert model is not None
+
+    def test_save_to_data_dir_random(self):
+        model = AtariConv_v6()
+        name = model.save(data_dir='c:\data')
+        model = Storeable.load(name, data_dir='c:\data')
+        assert model is not None
+
+class TestModelDB(TestCase):
+    def testModelDB(self):
+        mdb = ModelDb('c:\data')
+        mdb.print_data()

@@ -4,12 +4,23 @@ import pickle
 from abc import ABC
 import errno
 from pathlib import Path
+import inspect
+import hashlib
 
-class Metadata():
-    def __init__(self, object_type, args):
+class Metadata:
+    def __init__(self, obj, args):
         self.args = args
-        self.type = object_type
+        self.type = type(obj)
         self.data = {}
+        self.guid = self.guid(self.type, args)
+
+    """computes a unique GUID for each model/args pair
+    """
+    def guid(self, obj, args):
+        md5 = hashlib.md5()
+        md5.update(inspect.getsource(obj).encode('utf8'))
+        md5.update(repr(args).encode('utf8'))
+        return md5.digest().hex()
 
     def __str__(self):
         if self.args is not None and len(self.args) > 0:
@@ -28,7 +39,7 @@ class Storeable(ABC):
     def __init__(self, *args):
         self.classname = type(self)
         self.args = args
-        self.metadata = Metadata(type(self), args)
+        self.metadata = Metadata(self, args)
 
     """ makes it so we only save the init params and weights to disk
     the res
@@ -54,17 +65,22 @@ class Storeable(ABC):
             data = home / "data"
         else:
             data = Path(data_dir)
+
+        if filename is None:
+            import random, string
+            filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
+
         fn = data / "models" / filename
         return fn
 
-    def save(self, filename, data_dir=None):
+    def save(self, filename=None, data_dir=None):
         path = Storeable.fn(filename, data_dir)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('wb') as f:
             metadata, args, state_dict = self.__getstate__()
             pickle.dump(metadata, f)
             pickle.dump(self, f)
-
+        return path.name
 
     @staticmethod
     def load(filename, data_dir=None):
@@ -158,3 +174,19 @@ class StoreableOld(ABC):
             state_dict = torch.load(model_filename)
             model.load_state_dict(state_dict)
         return model
+
+class ModelDb:
+    def __init__(self, data_dir):
+        self.metadatas = []
+        datapath = Path(data_dir) / 'models'
+        for file in datapath.iterdir():
+            self.metadatas.append(Storeable.load_metadata(file.name, data_dir))
+
+    def print_data(self):
+        for metadata in self.metadatas:
+            print(metadata)
+            print(metadata.guid)
+            for field, value in metadata.data.items():
+                print(field, value)
+
+

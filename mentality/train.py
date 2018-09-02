@@ -40,7 +40,8 @@ class Trainable(TensorBoardObservable):
             batch_size=batch_size,
             num_workers=0,
             shuffle=True,
-            pin_memory=True
+            pin_memory=True,
+            drop_last=True
         )
         return loader
 
@@ -55,8 +56,6 @@ class Trainable(TensorBoardObservable):
 
         for batch_idx, (data, target) in enumerate(train_loader):
             start = time.time()
-            if data.shape[0] != batch_size:
-                break
             data = data.to(device)
             optimizer.zero_grad()
             output = self(data, noise=False)
@@ -82,8 +81,6 @@ class Trainable(TensorBoardObservable):
 
             for batch_idx, (data, target) in enumerate(test_loader):
                 start = time.time()
-                if data.shape[0] != batch_size:
-                    break
                 data = data.to(device)
                 output = self(data)
                 if type(output) == tuple:
