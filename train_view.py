@@ -1,7 +1,7 @@
 import torchvision
 import torch
 import models
-from mentality import OpenCV, TensorBoard, Storeable
+from mentality import OpenCV, TensorBoard
 from tqdm import tqdm
 import torch.nn as nn
 import torchvision.transforms as TVT
@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
 
     def registerViews(model):
-        tb = TensorBoard(comment=str(atari_conv.config))
+        tb = TensorBoard(comment=str(atari_conv.metadata))
         tb.register(atari_conv)
         model.registerView('input', OpenCV('input',(320,420)))
         model.registerView('output', OpenCV('output',(320,420)))
@@ -96,7 +96,7 @@ if __name__ == '__main__':
         losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
         l = torch.Tensor(losses)
         ave_test_loss = l.mean().item()
-        atari_conv.save(str(atari_conv.config), data_path, ave_test_loss)
+        atari_conv.save(str(atari_conv.metadata), data_path, ave_test_loss)
 
 
 

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mentality import Dispatcher, Observable, Storeable, Lossable, Checkable, Trainable
+from mentality import Dispatcher, Observable, Lossable, Checkable, Trainable, Storeable
 
 # loss should attached to the model, but set during training,
 # making it a pure inheritable thing means code changes required to
@@ -267,7 +267,7 @@ class ConvVAEFixed(BaseVAE, Storeable, BcelKldLoss):
             # batchnorm in autoencoding is a thing
             # https://arxiv.org/pdf/1602.02282.pdf
 
-            from mentality import conv_output_shape
+            from mentality.util import conv_output_shape
 
             # encoder
             self.e_conv1 = nn.Conv2d(3,32, kernel_size=first_kernel, stride=first_stride)
@@ -291,8 +291,6 @@ class ConvVAEFixed(BaseVAE, Storeable, BcelKldLoss):
     class Decoder(nn.Module):
         def __init__(self, z_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
             nn.Module.__init__(self)
-
-            from mentality import conv_transpose_output_shape
 
             # decoder
             self.d_conv1 = nn.ConvTranspose2d(32, 32, kernel_size=z_shape, stride=1)
@@ -327,7 +325,7 @@ class ConvVAE4Fixed(BaseVAE, Storeable, BcelKldLoss):
             # batchnorm in autoencoding is a thing
             # https://arxiv.org/pdf/1602.02282.pdf
 
-            from mentality import conv_output_shape
+            from mentality.util import conv_output_shape
 
             # encoder
             self.e_conv1 = nn.Conv2d(3,32, kernel_size=first_kernel, stride=first_stride)
@@ -356,8 +354,6 @@ class ConvVAE4Fixed(BaseVAE, Storeable, BcelKldLoss):
     class Decoder(nn.Module):
         def __init__(self, z_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
             nn.Module.__init__(self)
-
-            from mentality import conv_transpose_output_shape
 
             # decoder
             self.d_conv1 = nn.ConvTranspose2d(32, 128, kernel_size=z_shape, stride=1)
@@ -666,7 +662,7 @@ class AtariConv_v2(BaseVAE, Storeable, MSELoss, Trainable):
 
         def forward(self, z, indices):
 
-            from mentality import default_maxunpool_indices
+            from mentality.util import default_maxunpool_indices
 
             batch_size = z.shape[0]
             device = z.device
@@ -946,8 +942,9 @@ class AtariConv_v5(BaseVAE, MSELoss, Storeable):
         self.input_shape = (210, 160)
         encoder = self.Encoder()
         decoder = self.Decoder()
-        BaseVAE.__init__(self, encoder, decoder)
         Storeable.__init__(self)
+        BaseVAE.__init__(self, encoder, decoder)
+
 
     class Encoder(nn.Module, Checkable):
         def __init__(self):
@@ -976,15 +973,16 @@ class AtariConv_v5(BaseVAE, MSELoss, Storeable):
 """Based on SqueezeNet
 https://arxiv.org/abs/1602.07360
 """
-class AtariConv_v6(BaseVAE, MSELoss, Storeable):
+class AtariConv_v6(Storeable, BaseVAE, MSELoss):
     def __init__(self, filter_stack=None):
         self.input_shape = (210, 160)
         if filter_stack is None:
             filter_stack = [64, 64, 64, 64, 64]
         encoder = self.Encoder(filter_stack)
         decoder = self.Decoder(filter_stack)
-        BaseVAE.__init__(self, encoder, decoder)
         Storeable.__init__(self, filter_stack)
+        BaseVAE.__init__(self, encoder, decoder)
+
 
 
 

@@ -30,9 +30,9 @@ class Rollout(Dispatcher, Observable):
         observation = self.env.reset()
         for t in range(max_timesteps):
             screen = self.env.render(mode='rgb_array')
-            self.updateObservers('input', screen, 'numpyRGB')
+            self.updateObserversWithImage('input', screen, 'numpyRGB')
             action = policy.action(observation)
-            self.updateObservers('screen_action',(screen, action),'screen_action')
+            self.updateObservers('screen_action',(screen, action),{'func':'screen_action'})
             observation, reward, done, info = self.env.step(action)
             if done:
                 print("Episode finished after {} timesteps".format(t+1))
@@ -48,12 +48,17 @@ class ActionEmbedding():
         action_t[action] = 1.0
         return action_t
 
+class ObservationAction:
+    def __init__(self):
+        self.observation = None
+        self.action = None
+
 """
 update takes a tuple of ( numpyRGB, integer )
 and saves as tensors
 """
 class ActionEncoder(View):
-    def __init__(self, model, env, filename):
+    def __init__(self, model, env, filename, datadir):
         View.__init__(self)
         self.model = model
         self.model.eval()
@@ -62,13 +67,18 @@ class ActionEncoder(View):
         self.filename = filename
         self.action_embedding = ActionEmbedding(env)
         self.device = torch.device('cpu')
+        self.datadir = datadir
+        if datadir is None:
+            self.datadir = 'c:\data'
+        self.env = env
+        self.oa = None
 
     def to(self, device):
         self.model.to(device)
         self.device = device
         return self
 
-    def update(self, screen_action, format):
+    def update(self, screen_action, metadata):
         with torch.no_grad():
             self.model.eval()
         x = tvf.to_tensor(screen_action[0].copy()).detach().unsqueeze(0).to(self.device)
@@ -78,20 +88,20 @@ class ActionEncoder(View):
         obs_n = mu.detach().cpu().numpy()
         act_n = a.cpu().numpy()
         act_n = np.expand_dims(act_n, axis=0)
-        obs_act = np.concatenate((obs_n, act_n), axis=1)
-        obs_act = np.expand_dims(obs_act, axis=0)
 
+        if self.oa is None:
+            self.oa = ObservationAction()
+            self.oa.observation = np.empty(obs_n.shape, dtype='float32')
+            self.oa.action = np.empty(act_n.shape, dtype='float32')
 
-        if self.sess_obs_act is None:
-            self.sess_obs_act = np.empty((0, obs_act.shape[1]), dtype='float32')
-
-        self.sess_obs_act = np.append(self.sess_obs_act, obs_act, axis=0)
-        print(self.sess_obs_act.shape)
+        self.oa.observation = np.append(self.oa.observation, obs_n, axis=0)
+        self.oa.action = np.append(self.oa.action, act_n, axis=0)
 
     def endSession(self):
 
-        file = open('data/spaceinvaders/latent/' + self.filename + str(self.session),'wb')
-        pickle.dump(self.sess_obs_act, file=file)
+        #todo add code to make directory
+        file = open(self.datadir +'/' +  self.env.spec.id + '/latent/' + self.filename + str(self.session),'wb')
+        pickle.dump(self.oa, file=file)
         self.session += 1
         self.sess_obs_act = None
 
@@ -110,9 +120,10 @@ if __name__ == '__main__':
 
     name = 'atari_v3'
     #atari_conv = models.AtariConv_v4()
-    atari_conv = Storeable.load(name)
+    atari_conv = Storeable.load(r'jenkins-View-10\23b450a23bfbe218aa5070220afdab0db0d58216\AtariConv_v6\([64, 64, 64, 64, 64],)',
+                                data_dir='c:/data')
     atari_conv = atari_conv.eval()
-    ae = ActionEncoder(atari_conv, env, 'run').to(device)
+    ae = ActionEncoder(atari_conv, env, 'run', 'c:/data').to(device)
     rollout.registerView('screen_action', ae)
 
 

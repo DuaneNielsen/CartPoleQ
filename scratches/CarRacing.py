@@ -1,5 +1,6 @@
 import gym
 env = gym.make('CarRacing-v0')
+print(env.spec.id)
 for i_episode in range(20):
     observation = env.reset()
     for t in range(20000):

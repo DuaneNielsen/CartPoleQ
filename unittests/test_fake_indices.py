@@ -2,7 +2,7 @@ import torch
 from unittest import TestCase
 import numpy as np
 from torch import nn
-from mentality import default_maxunpool_indices
+from mentality.util import default_maxunpool_indices
 
 def rewrite_index(dims):
     cell = torch.zeros(dims)
@@ -18,7 +18,7 @@ class TestIndices(TestCase):
         x = x.reshape(4,4)
         cell = rewrite_index((3,3))
         print(cell)
-        cell = default_maxunpool_indices((6, 6), (2, 2), 1, 1)
+        cell = default_maxunpool_indices((6, 6), (2, 2), 1, 1, torch.device('cpu'))
         print(cell)
 
         mp = nn.MaxPool2d(2,2, return_indices=True)
@@ -32,7 +32,7 @@ class TestIndices(TestCase):
 
         for a in inp:
             a, i = mp(a)
-            di = default_maxunpool_indices((a.shape[2],a.shape[3]), (2,2), 1, 3)
+            di = default_maxunpool_indices((a.shape[2],a.shape[3]), (2,2), 1, 3, torch.device('cpu'))
             print(i.shape, di.shape)
             assert i.shape ==  di.shape
 
