@@ -84,13 +84,14 @@ if __name__ == '__main__':
         model.registerView('z', OpenCV('z',(320,420)))
 
 
-    atari_conv = models.AtariConv_v6()
+
+    atari_conv = models.AtariConv_v6([32, 64, 256, 1024, 2056])
     #atari_conv = Storeable.load(name)
     registerViews(atari_conv)
 
     optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
-    for epoch in tqdm(range(50)):
+    for epoch in tqdm(range(1)):
         atari_conv.train_model(spaceinvaders_rgb_210_160, 24, device, optimizer=optimizer)
 
         losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
