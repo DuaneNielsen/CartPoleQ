@@ -50,7 +50,6 @@ class TestModels(TestCase):
         filter_stacks_to_test.append([32, 64, 256, 256, 256])
         filter_stacks_to_test.append([32, 64, 256, 512, 512])
         filter_stacks_to_test.append([32, 64, 256, 512, 1024])
-        filter_stacks_to_test.append([32, 64, 256, 512, 2056])
 
         for filter_stack in filter_stacks_to_test:
 
