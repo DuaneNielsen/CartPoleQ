@@ -980,8 +980,9 @@ class AtariConv_v6(Storeable, BaseVAE, MSELoss):
             filter_stack = [64, 64, 64, 64, 64]
         encoder = self.Encoder(filter_stack)
         decoder = self.Decoder(filter_stack)
-        Storeable.__init__(self, filter_stack)
         BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self, filter_stack)
+
 
 
 

@@ -17,7 +17,8 @@ class JenkinsConfig:
         self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda').replace('"', '')
 
     def run_id_string(self, model):
-        return 'runs/' + self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' + str(model.metadata)
+        return 'runs/' + self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' \
+               + model.metadata['slug']
 
     def device(self):
         return torch.device(str(self.TORCH_DEVICE))
@@ -55,6 +56,8 @@ class TestModels(TestCase):
 
             atari_conv = models.AtariConv_v6(filter_stack)
             run_name = jenkins_config.run_id_string(atari_conv)
+            atari_conv.metadata['run_name'] = run_name
+            atari_conv.metadata['git_commit_hash'] = jenkins_config.GIT_COMMIT
             registerViews(atari_conv, run_name)
             optimizer = torch.optim.Adam(atari_conv.parameters(), lr=1e-3)
 
@@ -63,7 +66,7 @@ class TestModels(TestCase):
 
                 losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
                 l = torch.Tensor(losses)
-                atari_conv.metadata.data['ave_test_loss'] = l.mean().item()
+                atari_conv.metadata['ave_test_loss'] = l.mean().item()
                 atari_conv.save(data_dir=jenkins_config.DATA_PATH)
 
 

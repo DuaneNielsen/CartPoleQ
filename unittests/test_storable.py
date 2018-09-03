@@ -32,13 +32,13 @@ class TestStorable(TestCase):
     def test_restore(self):
 
         r = Restoreable('one','two')
-        r.metadata.data['fisk'] = 'frisky'
+        r.metadata['fisk'] = 'frisky'
         r.save('8834739829')
         r = Storeable.load('8834739829')
         print(r.one, r.two)
         assert r is not None and r.one == 'one'
         m = Storeable.load_metadata('8834739829')
-        assert m.data['fisk'] == 'frisky'
+        assert m['fisk'] == 'frisky'
         print(m)
 
     def test_save_to_data_dir(self):
@@ -48,12 +48,24 @@ class TestStorable(TestCase):
         assert model is not None
 
     def test_save_to_data_dir_random(self):
-        model = AtariConv_v6()
+        model = AtariConv_v6([64,64,64,64,64])
+        print(model)
         name = model.save(data_dir='c:\data')
         model = Storeable.load(name, data_dir='c:\data')
+        print(model)
         assert model is not None
 
 class TestModelDB(TestCase):
     def testModelDB(self):
         mdb = ModelDb('c:\data')
         mdb.print_data()
+
+class TestElastic(TestCase):
+    def test_connect(self):
+        # connect to our cluster
+        from elasticsearch import Elasticsearch
+        es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+
+    def test_sync(self):
+        mdb = ModelDb('c:\data')
+        mdb.sync_to_elastic()

@@ -1,45 +1,72 @@
-import torch
-import os
 import pickle
 from abc import ABC
-import errno
 from pathlib import Path
 import inspect
 import hashlib
+import unicodedata
+import re
 
-class Metadata:
-    def __init__(self, obj, args):
-        self.args = args
-        self.type = type(obj)
-        self.data = {}
-        self.guid = self.guid(self.type, args)
-
-    """computes a unique GUID for each model/args pair
+def slugify(value, allow_unicode=False):
     """
-    def guid(self, obj, args):
-        md5 = hashlib.md5()
-        md5.update(inspect.getsource(obj).encode('utf8'))
-        md5.update(repr(args).encode('utf8'))
-        return md5.digest().hex()
-
-    def __str__(self):
-        if self.args is not None and len(self.args) > 0:
-            string = self.type.__name__  + '/' + str(self.args)
-        else:
-            string = + str(self.type).__name__
-        return string
+    Convert to ASCII if 'allow_unicode' is False. Convert spaces to hyphens.
+    Remove characters that aren't alphanumerics, underscores, or hyphens.
+    Convert to lowercase. Also strip leading and trailing whitespace.
+    """
+    value = str(value)
+    if allow_unicode:
+        value = unicodedata.normalize('NFKC', value)
+    else:
+        value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^\w\s-]', '', value).strip().lower()
+    return re.sub(r'[-\s]+', '-', value)
 
 
 """Stores the object params for initialization
 Storable MUST be the first in the inheritance chain
 So put it as the first class in the inheritance
 ie: class MyModel(Storable, nn.Module)
+the init method must also be called as the LAST one in the sequence..
+ie: nn.Module.__init__(self)
+    Storable.__init(self, arg1, arg2, etc)
+fixing to make less fragile is on todo, but not trivial...
 """
 class Storeable(ABC):
     def __init__(self, *args):
         self.classname = type(self)
+
+        #snag the args from the child class during initialization
+        stack = inspect.stack()
+        child_callable = stack[1][0]
+        argname, _, _, argvalues = inspect.getargvalues(child_callable)
+
+        self.repr_string = ""
+        for key in argname:
+            if key != 'self':
+                self.repr_string += ' (' + key + '): ' + str(argvalues[key])
+
+        # too lazy to finish the job and figure out how to store them properly
+        # so that they can be used to re-initialize a new class
+        # so we will have to pass all the args in for now
         self.args = args
-        self.metadata = Metadata(self, args)
+        self.metadata = {}
+        self.metadata['guid'] = self.guid()
+        self.metadata['classname'] = type(self).__name__
+        self.metadata['args'] = self.repr_string
+        self.metadata['repr'] = repr(self)
+        self.metadata['slug'] = slugify(type(self).__name__ + '-' + self.repr_string)
+
+
+    def extra_repr(self):
+        return self.repr_string
+
+
+    """computes a unique GUID for each model/args pair
+    """
+    def guid(self):
+        md5 = hashlib.md5()
+        md5.update(self.repr_string.encode('utf8'))
+        return md5.digest().hex()
+
 
     """ makes it so we only save the init params and weights to disk
     the res
@@ -75,6 +102,9 @@ class Storeable(ABC):
 
     def save(self, filename=None, data_dir=None):
         path = Storeable.fn(filename, data_dir)
+        self.metadata['filename'] = path.name
+        from datetime import datetime
+        self.metadata['timestamp'] = datetime.now()
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('wb') as f:
             metadata, args, state_dict = self.__getstate__()
@@ -85,7 +115,7 @@ class Storeable(ABC):
     @staticmethod
     def load(filename, data_dir=None):
         with Storeable.fn(filename, data_dir).open('rb') as f:
-            metadata =  pickle.load(f)
+            _ =  pickle.load(f)
             return pickle.load(f)
 
     """ Load metadata only
@@ -95,85 +125,6 @@ class Storeable(ABC):
         with Storeable.fn(filename, data_dir).open('rb') as f:
             return  pickle.load(f)
 
-"""
-ModelConfig is concerned with initializing, loading and saving the model and params
-"""
-
-class StoreableOld(ABC):
-    def __init__(self, *args):
-        self.config = Metadata(type(self), args)
-
-    @staticmethod
-    def fn(filename, data_dir=None):
-        if data_dir is None:
-            data_dir = 'data/models/'
-
-        model_dir = data_dir + '/models/'
-
-        return model_dir + filename + '_config.pt', model_dir + filename + '_model.pt'
-
-
-    """ Saves the model
-    if test_loss is set, it will check that the model on disk has a worse test loss
-    before overwriting it
-    """
-    def save(self, filename, data_dir=None, test_loss=None):
-
-        if data_dir is None:
-            data_dir = 'data'
-
-        model_dir = data_dir + '/models/'
-
-        try:
-            os.makedirs(model_dir)
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-
-        config = self.get_config(filename)
-        if config is not None and config.test_loss is not None and config.test_loss < test_loss:
-            print('model not saved as the saved model loss was ' + str(config.test_loss) +
-                      'which was better than ' + str(test_loss))
-            return
-
-        config_filename, model_filename = Storeable.fn(filename, data_dir)
-
-        os.makedirs(os.path.dirname(config_filename), exist_ok=True)
-
-        with open(config_filename, 'wb+') as output:  # Overwrites any existing file.
-            pickle.dump(self.config, output, pickle.HIGHEST_PROTOCOL)
-        torch.save(self.state_dict(), model_filename)
-
-    def get_config(self, filename):
-        config_filename, model_filename = Storeable.fn(filename)
-        if Storeable.file_exists(filename):
-            with open(config_filename, 'rb') as inp:
-                config = pickle.load(inp)
-                return config
-        else:
-            return None
-
-
-    @staticmethod
-    def get_model(config):
-        return config.type(*config.params)
-
-    @staticmethod
-    def file_exists(filename):
-        config_filename, model_filename = Storeable.fn(filename)
-        return os.path.isfile(config_filename)
-
-    @staticmethod
-    def load(filename, data_dir=None):
-
-        config_filename, model_filename = Storeable.fn(filename, data_dir=data_dir)
-
-        with open(config_filename, 'rb') as input:
-            config = pickle.load(input)
-            model = Storeable.get_model(config)
-            state_dict = torch.load(model_filename)
-            model.load_state_dict(state_dict)
-        return model
 
 class ModelDb:
     def __init__(self, data_dir):
@@ -184,9 +135,25 @@ class ModelDb:
 
     def print_data(self):
         for metadata in self.metadatas:
-            print(metadata)
-            print(metadata.guid)
-            for field, value in metadata.data.items():
+            for field, value in metadata.items():
                 print(field, value)
+
+    """ syncs data in filesystem to elastic
+    Dumb sync, just drops the whole index and rewrites it
+    """
+    def sync_to_elastic(self, host='localhost', port=9200):
+        from elasticsearch import Elasticsearch
+        es = Elasticsearch([{'host': host, 'port': port}])
+        es.indices.delete(index='test-models', ignore=[400, 404])
+        for metadata in self.metadatas:
+            res = es.index(index="test-models", doc_type='model', id=metadata['filename'], body=metadata)
+
+
+
+
+
+
+
+
 
 

@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
 
     def registerViews(model):
-        tb = TensorBoard(comment=str(atari_conv.metadata))
+        tb = TensorBoard(comment=model.metadata['slug'])
         tb.register(atari_conv)
         model.registerView('input', OpenCV('input',(320,420)))
         model.registerView('output', OpenCV('output',(320,420)))
@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
         losses = atari_conv.test_model(dev_set, 24, device)
         l = torch.Tensor(losses)
-        atari_conv.metadata.data['ave_test_loss'] = l.mean().item()
+        atari_conv.metadata['ave_test_loss'] = l.mean().item()
         print (l.mean().item())
         atari_conv.save(data_dir='c:\data')
 

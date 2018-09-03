@@ -9,3 +9,4 @@ pygame
 opencv-python
 tqdm
 imageio
+elasticsearch
