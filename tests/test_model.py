@@ -47,9 +47,9 @@ class TestModels(TestCase):
 
         filter_stacks_to_test = []
         filter_stacks_to_test.append([64, 64, 64, 64, 64])
-        filter_stacks_to_test.append([32, 64, 256, 256, 256])
-        filter_stacks_to_test.append([32, 64, 256, 512, 512])
-        filter_stacks_to_test.append([32, 64, 256, 512, 1024])
+        filter_stacks_to_test.append([40, 40, 256, 256, 256])
+        filter_stacks_to_test.append([40, 40, 256, 512, 512])
+        filter_stacks_to_test.append([40, 40, 256, 512, 512])
 
         for filter_stack in filter_stacks_to_test:
 
@@ -66,6 +66,8 @@ class TestModels(TestCase):
                 losses = atari_conv.test_model(spaceinvaders_rgb_210_160, 24, device)
                 l = torch.Tensor(losses)
                 atari_conv.metadata['ave_test_loss'] = l.mean().item()
+                atari_conv.metadata['dataset'] = 'spaceinvaders/images/raw'
+                atari_conv.metadata['epoch'] = epoch
                 atari_conv.save(data_dir=jenkins_config.DATA_PATH)
 
 
