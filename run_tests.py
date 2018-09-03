@@ -1,10 +1,9 @@
-import unittest
+from test_model import ModelFactoryIterator, run
+import models
 
 if __name__ == '__main__':
-    loader = unittest.TestLoader()
-    start_dir = 'tests'
-    suite = loader.discover(start_dir)
+    fac = ModelFactoryIterator(models.AtariConv_v6)
+    fac.model_args.append( ([64, 64, 64, 64, 64],) )
+    fac.model_args.append( ([40, 40, 256, 256, 256],))
 
-
-    runner = unittest.TextTestRunner()
-    runner.run(suite)
+    run(fac, '/spaceinvaders/images/dev/', 2)

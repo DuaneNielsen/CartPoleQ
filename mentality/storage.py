@@ -6,6 +6,7 @@ import hashlib
 import unicodedata
 import re
 
+
 def slugify(value, allow_unicode=False):
     """
     Convert to ASCII if 'allow_unicode' is False. Convert spaces to hyphens.
