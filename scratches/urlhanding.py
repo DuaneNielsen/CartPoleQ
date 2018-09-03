@@ -1,4 +1,6 @@
-run = r'runs\jenkins-View-17\d68fd69157daa29d35dc44d4dfb8a168047305e0\atariconv_v6-filter_stack-32-64-256-256-256'
-from mentality.storage import convert_to_url
+run = r'runs\jenkins-View-21\52455c8e38e8b9612619984f815e25692ec492f5\atariconv_v6-filter_stack-64-64-64-64-64'
+from test_model import JenkinsConfig
 
-print(convert_to_url(run, host='lt3vtgjm2'))
+jc = JenkinsConfig()
+
+print(jc.convert_to_url(run, host='lt3vtgjm2'))

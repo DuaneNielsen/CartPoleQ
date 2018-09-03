@@ -130,8 +130,9 @@ class Storeable(ABC):
 class ModelDb:
     def __init__(self, data_dir):
         self.metadatas = []
-        datapath = Path(data_dir) / 'models'
-        for file in datapath.iterdir():
+        self.datapath = Path(data_dir) / 'models'
+        self.data_dir = data_dir
+        for file in self.datapath.iterdir():
             self.metadatas.append(Storeable.load_metadata(file.name, data_dir))
 
     def print_data(self):
@@ -139,15 +140,26 @@ class ModelDb:
             for field, value in metadata.items():
                 print(field, value)
 
+    def print_data_for(self, filename):
+        metadata = Storeable.load_metadata(filename, self.data_dir)
+        for field, value in metadata.items():
+            print(field, value)
+
     """ syncs data in filesystem to elastic
     Dumb sync, just drops the whole index and rewrites it
     """
     def sync_to_elastic(self, host='localhost', port=9200):
-        from elasticsearch import Elasticsearch
+        from elasticsearch import Elasticsearch, ElasticsearchException
         es = Elasticsearch([{'host': host, 'port': port}])
         es.indices.delete(index='test-models', ignore=[400, 404])
         for metadata in self.metadatas:
-            res = es.index(index="test-models", doc_type='model', id=metadata['filename'], body=metadata)
+            try:
+                res = es.index(index="test-models", doc_type='model', id=metadata['filename'], body=metadata)
+                print(res)
+            except ElasticsearchException as es1:
+                print(es1)
+
+
 
 
 

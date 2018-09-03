@@ -69,3 +69,10 @@ class TestElastic(TestCase):
     def test_sync(self):
         mdb = ModelDb('c:\data')
         mdb.sync_to_elastic()
+
+    def test_printData(self):
+        mdb = ModelDb('c:\data')
+        mdb.print_data_for('6IC7WZ6DE908ZP5K')
+        mdb.print_data_for('YOTFMU3D8FQB03Z5')
+
+

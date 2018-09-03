@@ -25,6 +25,7 @@ class JenkinsConfig:
             import socket
             host = socket.gethostname()
         url = run.replace('\\', '\\\\')
+        url = run.replace('/', '\\\\')
         url = quote(url)
         url = 'http://' + host + ':' + port + '/#scalars&regexInput=' + url
         return url
