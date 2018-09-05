@@ -21,5 +21,5 @@ if __name__ == '__main__':
     model = mental.Storeable.load(selected_model['filename'], jc.DATA_PATH)
     most_improved = mental.train.OneShotLoader(model)
 
-    mental.train.run(most_improved, 'spaceinvaders/images/dev', 5)
+    mental.train.run(most_improved, 'spaceinvaders/images/raw', 5)
 
