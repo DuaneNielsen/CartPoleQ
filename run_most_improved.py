@@ -11,7 +11,7 @@ if __name__ == '__main__':
 
     """ Find the modal that improved the most on the last run"""
     for guid in top2:
-        if len(top2[guid]) > 2:
+        if len(top2[guid]) == 2:
             improvement = top2[guid][1][0] - top2[guid][0][0]
             if improvement > most_improved:
                 selected_model = top2[guid][0][1]
