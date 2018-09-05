@@ -11,10 +11,13 @@ if __name__ == '__main__':
 
     """ Find the modal that improved the most on the last run"""
     for guid in top2:
-        improvement = top2[guid][1][0] - top2[guid][0][0]
-        if improvement > most_improved:
-            selected_model = top2[guid][0][1]
-            most_improved = improvement
+        if len(top2[guid]) > 2:
+            improvement = top2[guid][1][0] - top2[guid][0][0]
+            if improvement > most_improved:
+                selected_model = top2[guid][0][1]
+                most_improved = improvement
+        else:
+            raise Exception('Not enough runs, do more runs')
 
     """ Load it from disk and train it for 5 epochs"""
     model = mental.Storeable.load(selected_model['filename'], jc.DATA_PATH)
