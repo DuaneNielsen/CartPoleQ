@@ -5,6 +5,7 @@ from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 import imageio
 from PIL import Image
+from elasticsearch import Elasticsearch, ElasticsearchException
 
 """Dispatcher allows dipatch to views.
 View's register here
@@ -216,6 +217,7 @@ class TensorBoardObservable:
         self.writeScalarToTB('tb_train_time', time, 'perf/train_time_per_batch')
         if batch_size != 0:
             self.writeScalarToTB('tb_train_time_per_item', time/batch_size, 'perf/train_time_per_item')
+
 
 
 class SummaryWriterWithGlobal(SummaryWriter):

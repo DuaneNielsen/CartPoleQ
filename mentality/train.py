@@ -1,8 +1,9 @@
 import torch
 import torch.utils.data as du
-from mentality.observe import TensorBoardObservable
+from mentality import JenkinsConfig, ElasticSearchUpdater, TensorBoard, TensorBoardObservable
 import time
 from abc import ABC, abstractmethod
+from tqdm import tqdm
 
 class Lossable(ABC):
     @abstractmethod
@@ -96,3 +97,74 @@ class Trainable(TensorBoardObservable):
                 self.writePerformanceToTB(loop_time, data.shape[0])
 
             return losses
+
+class ModelFactoryIterator:
+    def __init__(self, model_type):
+        self.model_type = model_type
+        self.model_args = []
+        self.model_args_index = 0
+        self.optimizer_type = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.model_args_index < len(self.model_args):
+            model = self.model_type(*self.model_args[self.model_args_index])
+            optim =  torch.optim.Adam(model.parameters(), lr=1e-3)
+            self.model_args_index += 1
+            return model, optim
+        else:
+            raise StopIteration()
+
+class OneShotLoader:
+    def __init__(self, model, optimizer=None):
+        self.model = model
+        self.optimizer = optimizer
+        self.burned = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.burned:
+            raise StopIteration
+        else:
+            self.burned = True
+            if self.optimizer is None:
+                optim = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+            else:
+                optim = self.optimizer
+            return self.model, optim
+
+
+def run(model_factory, dataset_path, epochs):
+    jenkins_config = JenkinsConfig()
+    device = jenkins_config.device()
+
+    dataset = jenkins_config.dataset(dataset_path)
+
+    for model, optim in model_factory:
+
+        run_name = jenkins_config.run_id_string(model)
+        model.metadata['run_name'] = run_name
+        model.metadata['run_url'] = jenkins_config.run_url_link(model)
+        model.metadata['git_commit_hash'] = jenkins_config.GIT_COMMIT
+        model.metadata['dataset'] = dataset_path
+        tb = TensorBoard(jenkins_config.tb_run_dir(model))
+        tb.register(model)
+        esup = ElasticSearchUpdater()
+        esup.register(model)
+
+        for epoch in tqdm(range(epochs)):
+            model.train_model(dataset, 24, device, optimizer=optim)
+
+            losses = model.test_model(dataset, 24, device)
+
+            l = torch.Tensor(losses)
+            model.metadata['ave_test_loss'] = l.mean().item()
+            if 'epoch' not in model.metadata:
+                model.metadata['epoch'] = 1
+            else:
+                model.metadata['epoch'] += 1
+            model.save(data_dir=jenkins_config.DATA_PATH)

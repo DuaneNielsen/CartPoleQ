@@ -5,6 +5,7 @@ import inspect
 import hashlib
 import unicodedata
 import re
+from mentality import Observable
 
 
 def slugify(value, allow_unicode=False):
@@ -31,8 +32,9 @@ ie: nn.Module.__init__(self)
     Storable.__init(self, arg1, arg2, etc)
 fixing to make less fragile is on todo, but not trivial...
 """
-class Storeable(ABC):
+class Storeable(Observable):
     def __init__(self, *args):
+        Observable.__init__(self)
         self.classname = type(self)
 
         #snag the args from the child class during initialization
@@ -111,6 +113,7 @@ class Storeable(ABC):
             metadata, args, state_dict = self.__getstate__()
             pickle.dump(metadata, f)
             pickle.dump(self, f)
+            self.updateObservers('save', filename, self.metadata)
         return path.name
 
     @staticmethod
@@ -145,16 +148,43 @@ class ModelDb:
         for field, value in metadata.items():
             print(field, value)
 
+
+    """ Returns the 2 best results for each guid
+    """
+    def topNLossbyModelGuid(self, n):
+        model_top = {}
+        for model in self.metadatas:
+            guid =  model['guid']
+            if guid not in model_top:
+                model_top[guid] = []
+                model_top[guid].append((model['ave_test_loss'], model))
+            else:
+                ave_test_loss = model['ave_test_loss']
+                lowest_loss_seen_so_far = model_top[guid][0][0]
+                if ave_test_loss < lowest_loss_seen_so_far:
+                    model_top[guid].append((ave_test_loss, model))
+                    model_top[guid].sort(key=lambda tup: tup[0])
+                    model_top[guid] = model_top[guid][0:n]
+
+        return model_top
+
+
+
+
     """ syncs data in filesystem to elastic
     Dumb sync, just drops the whole index and rewrites it
     """
     def sync_to_elastic(self, host='localhost', port=9200):
-        from elasticsearch import Elasticsearch, ElasticsearchException
-        es = Elasticsearch([{'host': host, 'port': port}])
-        es.indices.delete(index='test-models', ignore=[400, 404])
+        from elasticsearch import ElasticsearchException
+        from mentality.elastic import ElasticSetup
+
+        es = ElasticSetup(host, port)
+        es.deleteModelIndex()
+        es.createModelIndex()
+
         for metadata in self.metadatas:
             try:
-                res = es.index(index="test-models", doc_type='model', id=metadata['filename'], body=metadata)
+                res = es.es.index(index="models", doc_type='model', id=metadata['filename'], body=metadata)
                 print(res)
             except ElasticsearchException as es1:
                 print(es1)

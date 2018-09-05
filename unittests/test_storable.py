@@ -60,6 +60,11 @@ class TestModelDB(TestCase):
         mdb = ModelDb('c:\data')
         mdb.print_data()
 
+    def testTop(self):
+        mdb = ModelDb('c:\data')
+        top = mdb.topNLossbyModelGuid(2)
+        print(top)
+
 class TestElastic(TestCase):
     def test_connect(self):
         # connect to our cluster

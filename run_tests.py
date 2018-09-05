@@ -1,4 +1,4 @@
-from test_model import ModelFactoryIterator, run
+from mentality.train import ModelFactoryIterator, run
 import models
 
 if __name__ == '__main__':

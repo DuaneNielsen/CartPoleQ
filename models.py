@@ -54,12 +54,12 @@ class MSELoss(Lossable):
         return F.mse_loss(recon_x, x)
 
 
-class VAE(nn.Module, Observable, Storeable, BceKldLoss):
+class VAE(Storeable, nn.Module, Observable, BceKldLoss):
     def __init__(self):
         nn.Module.__init__(self)
         Observable.__init__(self)
-        Storeable.__init__(self)
         BceKldLoss.__init__(self)
+        Storeable.__init__(self)
 
         self.fc1 = nn.Linear(784, 400)
         self.fc21 = nn.Linear(400, 20)
@@ -102,7 +102,7 @@ class VAE(nn.Module, Observable, Storeable, BceKldLoss):
 """
 Autoncodes RBG images at 36 * 48
 """
-class ThreeLayerLinearVAE(nn.Module, Observable, Storeable, BceKldLoss):
+class ThreeLayerLinearVAE(Storeable, nn.Module, Observable, BceKldLoss):
     def __init__(self, input_dims, z_dims):
         nn.Module.__init__(self)
         Observable.__init__(self)
@@ -148,7 +148,7 @@ class ThreeLayerLinearVAE(nn.Module, Observable, Storeable, BceKldLoss):
         return recon, mu, logvar
 
 
-class ConvVAE(nn.Module, Observable, Storeable, BcelKldLoss):
+class ConvVAE(Storeable, nn.Module, Observable, BcelKldLoss):
     def __init__(self, input_dims, z_dims):
         nn.Module.__init__(self)
         Observable.__init__(self)
