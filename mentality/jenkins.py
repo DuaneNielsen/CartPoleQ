@@ -4,6 +4,8 @@ import torch
 import torchvision
 from torchvision import transforms as TVT
 from pathlib import Path
+import logging
+from logging.handlers import TimedRotatingFileHandler
 
 class JenkinsConfig:
     def __init__(self):
@@ -14,8 +16,7 @@ class JenkinsConfig:
         self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda').replace('"', '')
 
     def run_id_string(self, model):
-        return 'runs/' + self.BUILD_TAG + '/' + self.GIT_COMMIT + '/' \
-               + model.metadata['slug']
+        return 'runs/' + model.metadata['slug']
 
     def convert_to_url(self, run, host=None, port='6006'):
         if host is None:
@@ -51,3 +52,8 @@ class JenkinsConfig:
             transform=TVT.Compose([TVT.ToTensor()])
         )
         return dataset
+
+    def getLogPath(self, name):
+        logfile = Path(self.DATA_PATH) / 'logs' / name
+        logfile.parent.mkdir(parents=True, exist_ok=True)
+        return logfile

@@ -84,8 +84,8 @@ class Storeable(Observable):
     """ initializes a fresh model from disk with weights
     """
     def __setstate__(self, state):
-        self.metadata = state[0]
         self.__init__(*state[1])
+        self.metadata = state[0]
         self.load_state_dict(state[2])
 
     @staticmethod
@@ -129,6 +129,13 @@ class Storeable(Observable):
         with Storeable.fn(filename, data_dir).open('rb') as f:
             return  pickle.load(f)
 
+    @staticmethod
+    def update_metadata(filename, metadata_dict, data_dir=None):
+        """ Load model from disk and flag it as reloaded """
+        model = Storeable.load(filename, data_dir)
+        model.metadata = metadata_dict
+        model.save(filename, data_dir)
+
 
 class ModelDb:
     def __init__(self, data_dir):
@@ -152,19 +159,20 @@ class ModelDb:
     """ Returns the 2 best results for each guid
     """
     def topNLossbyModelGuid(self, n):
+        import collections
+        Loss = collections.namedtuple('Loss', 'loss metadata')
         model_top = {}
         for model in self.metadatas:
             guid =  model['guid']
-            if guid not in model_top:
-                model_top[guid] = []
-                model_top[guid].append((model['ave_test_loss'], model))
-            else:
-                ave_test_loss = model['ave_test_loss']
-                lowest_loss_seen_so_far = model_top[guid][0][0]
-                if ave_test_loss < lowest_loss_seen_so_far:
-                    model_top[guid].append((ave_test_loss, model))
-                    model_top[guid].sort(key=lambda tup: tup[0])
-                    model_top[guid] = model_top[guid][0:n]
+            ave_test_loss = model['ave_test_loss'] if 'ave_test_loss' in model else None
+            if ave_test_loss is not None:
+                if guid not in model_top:
+                    model_top[guid] = []
+                model_top[guid].append((ave_test_loss, model))
+
+        for guid in model_top:
+            model_top[guid].sort(key=lambda tup: tup[0])
+            model_top[guid] = model_top[guid][0:n]
 
         return model_top
 

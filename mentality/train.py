@@ -153,6 +153,9 @@ def run(model_factory, dataset_path, epochs):
         model.metadata['dataset'] = dataset_path
         tb = TensorBoard(jenkins_config.tb_run_dir(model))
         tb.register(model)
+        if 'tb_global_step' in model.metadata:
+            tb.global_step = model.metadata['tb_global_step']
+
         esup = ElasticSearchUpdater()
         esup.register(model)
 
@@ -167,4 +170,5 @@ def run(model_factory, dataset_path, epochs):
                 model.metadata['epoch'] = 1
             else:
                 model.metadata['epoch'] += 1
+            model.metadata['tb_global_step'] = tb.global_step
             model.save(data_dir=jenkins_config.DATA_PATH)
