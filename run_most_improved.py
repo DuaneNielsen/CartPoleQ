@@ -16,8 +16,6 @@ if __name__ == '__main__':
             if improvement > most_improved:
                 selected_model = top2[guid][0][1]
                 most_improved = improvement
-        else:
-            raise Exception('Not enough runs, do more runs')
 
     """ Load it from disk and train it for 5 epochs"""
     model = mental.Storeable.load(selected_model['filename'], jc.DATA_PATH)
