@@ -77,7 +77,6 @@ class TestElastic(TestCase):
 
     def test_printData(self):
         mdb = ModelDb('c:\data')
-        mdb.print_data_for('6IC7WZ6DE908ZP5K')
-        mdb.print_data_for('YOTFMU3D8FQB03Z5')
+        mdb.print_data_for('V9VTQAC8LHI7K2G6')
 
 

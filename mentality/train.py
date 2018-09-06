@@ -165,7 +165,12 @@ def run(model_factory, dataset_path, epochs):
             losses = model.test_model(dataset, 24, device)
 
             l = torch.Tensor(losses)
-            model.metadata['ave_test_loss'] = l.mean().item()
+
+            ave_test_loss = l.mean().item()
+            import math
+            if not math.isnan(ave_test_loss):
+                model.metadata['ave_test_loss'] = ave_test_loss
+
             if 'epoch' not in model.metadata:
                 model.metadata['epoch'] = 1
             else:

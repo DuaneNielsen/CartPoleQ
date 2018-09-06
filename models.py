@@ -226,7 +226,8 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
         mu = encoded[0]
         logvar = encoded[1]
 
-        self.updateObserversWithImage('z', mu[0].data)
+        if mu.shape[1] == 3 or mu.shape[1] == 1:
+            self.updateObserversWithImage('z', mu[0].data)
 
         if len(encoded) > 2:
             indices = encoded[2]
@@ -254,12 +255,12 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
 """
 input_shape is a tuple of (height,width)
 """
-class ConvVAEFixed(BaseVAE, Storeable, BcelKldLoss):
+class ConvVAEFixed(BaseVAE, Storeable, MSELoss):
     def __init__(self, input_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
         self.input_shape = input_shape
         encoder = self.Encoder(input_shape, first_kernel, first_stride, second_kernel, second_stride)
         decoder = self.Decoder(encoder.z_shape, first_kernel, first_stride, second_kernel, second_stride)
-        BaseVAE.__init__(self, input_shape, encoder, decoder)
+        BaseVAE.__init__(self, encoder, decoder)
         Storeable.__init__(self, input_shape, first_kernel, first_stride, second_kernel, second_stride)
 
 
@@ -298,7 +299,7 @@ class ConvVAEFixed(BaseVAE, Storeable, BcelKldLoss):
             self.d_conv1 = nn.ConvTranspose2d(32, 32, kernel_size=z_shape, stride=1)
             self.d_bn1 = nn.BatchNorm2d(32)
 
-            self.d_conv2 = nn.ConvTranspose2d(32, 32, kernel_size=second_kernel, stride=second_stride, output_padding=(1,0))
+            self.d_conv2 = nn.ConvTranspose2d(32, 32, kernel_size=second_kernel, stride=second_stride, output_padding=(0,1))
             self.d_bn2 = nn.BatchNorm2d(32)
 
             self.d_conv3 = nn.ConvTranspose2d(32, 3, kernel_size=first_kernel, stride=first_stride, output_padding=1)
@@ -312,12 +313,12 @@ class ConvVAEFixed(BaseVAE, Storeable, BcelKldLoss):
 """
 input_shape is a tuple of (height,width)
 """
-class ConvVAE4Fixed(BaseVAE, Storeable, BcelKldLoss):
+class ConvVAE4Fixed(Storeable, BaseVAE, MSELoss):
     def __init__(self, input_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
         self.input_shape = input_shape
         encoder = self.Encoder(input_shape, first_kernel, first_stride, second_kernel, second_stride)
         decoder = self.Decoder(encoder.z_shape, first_kernel, first_stride, second_kernel, second_stride)
-        BaseVAE.__init__(self, input_shape, encoder, decoder)
+        BaseVAE.__init__(self, encoder, decoder)
         Storeable.__init__(self, input_shape, first_kernel, first_stride, second_kernel, second_stride)
 
 
@@ -364,7 +365,7 @@ class ConvVAE4Fixed(BaseVAE, Storeable, BcelKldLoss):
             self.d_conv2 = nn.ConvTranspose2d(128, 128, kernel_size=second_kernel, stride=second_stride, output_padding=(1,0))
             self.d_bn2 = nn.BatchNorm2d(128)
 
-            self.d_conv3 = nn.ConvTranspose2d(128, 32, kernel_size=second_kernel, stride=second_stride, output_padding=(1,0))
+            self.d_conv3 = nn.ConvTranspose2d(128, 32, kernel_size=second_kernel, stride=second_stride, output_padding=(0,1))
             self.d_bn3 = nn.BatchNorm2d(32)
 
             self.d_conv4 = nn.ConvTranspose2d(32, 3, kernel_size=first_kernel, stride=first_stride, output_padding=1)
@@ -463,14 +464,14 @@ class SimpleLinear(BaseVAE, Storeable, BcelKldLoss):
         def forward(self, z):
             return F.relu(self.decoder(z))
 
-class PerceptronVAE(BaseVAE, BceKldLoss):
+class PerceptronVAE(Storeable, BaseVAE, MSELoss):
     def __init__(self, input_shape, middle_size, z_size):
         self.input_shape = input_shape
         self.input_size = self.input_shape[0] * self.input_shape[1]
         encoder = self.Encoder(self.input_size, middle_size, z_size)
         decoder = self.Decoder(self.input_size, middle_size, z_size)
         BaseVAE.__init__(self, encoder, decoder)
-        Storeable.__init__(self, input_shape, z_size)
+        Storeable.__init__(self, input_shape, middle_size, z_size)
 
     class Encoder(nn.Module, Checkable):
         def __init__(self, input_size, middle_size, z_size):
@@ -495,7 +496,7 @@ class PerceptronVAE(BaseVAE, BceKldLoss):
 
         def forward(self, z):
             middle = F.relu(self.middle(z))
-            return F.sigmoid(self.decoder(middle))
+            return F.relu(self.decoder(middle))
 
 class DQN(nn.Module):
     def __init__(self):
@@ -578,9 +579,9 @@ class AtariConv(BaseVAE, Storeable, BceKldLoss):
             self.up1 = nn.MaxUnpool2d(2, 2)
 
         def forward(self, z, indices):
-            return torch.sigmoid(self.bn1(self.ct1(self.up1(z, indices[0]))))
+            return F.relu(self.bn1(self.ct1(self.up1(z, indices[0]))))
 
-class AtariConv_v2(BaseVAE, Storeable, MSELoss, Trainable):
+class AtariConv_v2(Storeable, BaseVAE,  MSELoss, Trainable):
     def __init__(self):
         self.input_shape = (210, 160)
         encoder = self.Encoder()
@@ -790,7 +791,7 @@ class AtariConv_v3(BaseVAE, Storeable, MSELoss, Trainable):
             return F.relu(decoded)
 
 
-class AtariConv_v4(BaseVAE, Storeable, MSELoss, Trainable):
+class AtariConv_v4(Storeable, BaseVAE, MSELoss, Trainable):
     def __init__(self):
         self.input_shape = (210, 160)
         encoder = self.Encoder()
@@ -939,13 +940,13 @@ class FireDecoder(nn.Module, Checkable):
 """Based on SqueezeNet
 https://arxiv.org/abs/1602.07360
 """
-class AtariConv_v5(BaseVAE, MSELoss, Storeable):
+class AtariConv_v5(Storeable, BaseVAE, MSELoss):
     def __init__(self):
         self.input_shape = (210, 160)
         encoder = self.Encoder()
         decoder = self.Decoder()
-        Storeable.__init__(self)
         BaseVAE.__init__(self, encoder, decoder)
+        Storeable.__init__(self)
 
 
     class Encoder(nn.Module, Checkable):
