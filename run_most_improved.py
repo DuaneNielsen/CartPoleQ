@@ -18,9 +18,9 @@ if __name__ == '__main__':
         if len(top2[guid]) == 2:
             improvement = top2[guid][1][0] - top2[guid][0][0]
             metadata = top2[guid][0][1]
-            reloaded = metadata['reloaded'] if 'reloaded' in metadata else 0
+            reloaded = metadata['reloads'] if 'reloads' in metadata else 0
             log.debug('{} improved by {}'.format(guid, improvement))
-            if reloaded < 3 and improvement > most_improved:
+            if reloaded < 2 and improvement > most_improved:
                 selected_model = metadata
                 most_improved = improvement
             elif improvement > most_improved:
@@ -31,7 +31,9 @@ if __name__ == '__main__':
         exit(10)
 
     """ Load model from disk and flag it as reloaded """
-    log.info('most improved was {} which improved by {}'.format(selected_model['guid'], most_improved))
+    log.info('most improved was {} which improved by {} and has {} reloads'.format(selected_model['guid'],
+                                                                                   most_improved,
+                                                                                   selected_model['reloads']))
     filename = selected_model['filename']
     model = mental.Storeable.load(filename, jc.DATA_PATH)
     metadata = dict(model.metadata)

@@ -226,10 +226,12 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
         mu = encoded[0]
         logvar = encoded[1]
 
+        self.updateObserversWithImage('z', mu[0].data)
+
         if len(encoded) > 2:
             indices = encoded[2]
+
         z = self.reparameterize(mu, logvar, noise=noise)
-        self.updateObserversWithImage('z', z[0].data)
         if indices is not None:
             decoded = self.decoder(z, indices)
         else:
