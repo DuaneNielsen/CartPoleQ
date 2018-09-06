@@ -26,6 +26,9 @@ if __name__ == '__main__':
             elif improvement > most_improved:
                 log.debug('{} improved by {} but was burned after {} reloads'.format(guid, improvement, reloaded))
 
+    if selected_model is None:
+        exit(10)
+
     """ Load model from disk and flag it as reloaded """
     log.info('most improved was {} which improved by {}'.format(selected_model['guid'], most_improved))
     filename = selected_model['filename']
