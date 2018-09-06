@@ -75,7 +75,6 @@ class Storeable(Observable):
     """computes a unique GUID for each model/args pair
     """
     def class_guid(self):
-        import random
         md5 = hashlib.md5()
         md5.update(self.repr_string.encode('utf8'))
         return md5.digest().hex()

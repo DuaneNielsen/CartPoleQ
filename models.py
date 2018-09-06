@@ -692,7 +692,7 @@ class AtariConv_v2(Storeable, BaseVAE,  MSELoss, Trainable):
             return F.relu(decoded)
             #return torch.sigmoid(decoded)
 
-class AtariConv_v3(BaseVAE, Storeable, MSELoss, Trainable):
+class AtariConv_v3(Storeable, BaseVAE, MSELoss, Trainable):
     def __init__(self):
         self.input_shape = (210, 160)
         encoder = self.Encoder()

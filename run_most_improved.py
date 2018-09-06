@@ -1,5 +1,8 @@
 import mentality as mental
 import logging
+from pathlib import Path
+import torchvision
+import torchvision.transforms as TVT
 
 if __name__ == '__main__':
 
@@ -10,6 +13,13 @@ if __name__ == '__main__':
     top2 = mdb.topNLossbyModelGuid(2)
     most_improved = 0
     selected_model = None
+
+    config = mental.Config()
+    datadir = Path(config.DATA_PATH) / 'spaceinvaders/images/dev'
+    dataset = torchvision.datasets.ImageFolder(
+        root=datadir.absolute(),
+        transform=TVT.Compose([TVT.ToTensor()])
+    )
 
     """ Find the modal that improved the most on the last run"""
     for guid in top2:
@@ -44,5 +54,4 @@ if __name__ == '__main__':
 
     """ train it for 5 epochs"""
     most_improved = mental.train.OneShotRunner(model)
-    mental.train.run(most_improved, 'spaceinvaders/images/dev', 5)
-
+    most_improved.run(dataset, batch_size=24,  epochs=5)

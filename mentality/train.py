@@ -115,7 +115,7 @@ class Runner(ABC):
             model.metadata['run_name'] = run_name
             model.metadata['run_url'] = config.run_url_link(model)
             model.metadata['git_commit_hash'] = config.GIT_COMMIT
-            model.metadata['dataset'] = dataset.root
+            model.metadata['dataset'] = str(dataset.root)
             tb = TensorBoard(config.tb_run_dir(model))
             tb.register(model)
             if 'tb_global_step' in model.metadata:

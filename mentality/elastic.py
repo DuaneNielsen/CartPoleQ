@@ -1,6 +1,9 @@
 from mentality.observe import View
 from elasticsearch import Elasticsearch, ElasticsearchException
 import pprint
+import logging
+
+log = logging.getLogger(__name__)
 
 def connect(host, port):
     if host is None:
@@ -17,7 +20,8 @@ class ElasticSearchUpdater(View):
         try:
             res = self.es.index(index="models", doc_type='model', id=metadata['filename'], body=metadata)
         except ElasticsearchException as es1:
-            print(es1)
+            log.error("ElasticSearch threw exception")
+            log.error(es1)
 
     def register(self, model):
         model.registerView('save', self)
@@ -46,7 +50,8 @@ class ElasticSetup:
         try:
             self.es.indices.delete(index='models')
         except ElasticsearchException as es1:
-            print(es1)
+            log.error("ElasticSearch threw exception")
+            log.error(es1)
 
 # elastic seems a bit too complex, think I'll just use python
 class ElasticQueryTool:
