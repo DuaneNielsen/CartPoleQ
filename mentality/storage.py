@@ -107,7 +107,7 @@ class Storeable(Observable):
         path = Storeable.fn(filename, data_dir)
         self.metadata['filename'] = path.name
         from datetime import datetime
-        self.metadata['timestamp'] = datetime.now()
+        self.metadata['timestamp'] = datetime.utcnow()
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('wb') as f:
             metadata, args, state_dict = self.__getstate__()

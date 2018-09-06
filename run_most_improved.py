@@ -27,6 +27,7 @@ if __name__ == '__main__':
                 log.debug('{} improved by {} but was burned after {} reloads'.format(guid, improvement, reloaded))
 
     if selected_model is None:
+        log.info('all checkpoints burned')
         exit(10)
 
     """ Load model from disk and flag it as reloaded """
