@@ -19,7 +19,7 @@ if __name__ == '__main__':
             improvement = top2[guid][1][0] - top2[guid][0][0]
             metadata = top2[guid][0][1]
             reloads = metadata['reloads'] if 'reloads' in metadata else 0
-            log.debug('{} improved by {}'.format(guid, improvement))
+            log.debug('{} {} improved by {}'.format(guid, metadata['classname'], improvement))
             if reloads < 2 and improvement > most_improved:
                 selected_model = metadata
                 most_improved = improvement
