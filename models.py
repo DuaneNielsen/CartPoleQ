@@ -380,7 +380,7 @@ class ConvVAE4Fixed(Storeable, BaseVAE, MSELoss):
 
 
 # (210,160)
-class AtariLinear(BaseVAE, Storeable, BceKldLoss):
+class AtariLinear(Storeable, BaseVAE, BceKldLoss):
     def __init__(self, input_shape, z_size):
         self.input_shape = input_shape
         self.input_size = self.input_shape[0] * self.input_shape[1]

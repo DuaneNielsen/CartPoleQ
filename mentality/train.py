@@ -98,7 +98,53 @@ class Trainable(TensorBoardObservable):
 
             return losses
 
-class ModelFactoryIterator:
+class Runner(ABC):
+    def __iter__(self):
+        raise NotImplementedError
+    def __next__(self):
+        raise NotImplementedError
+
+    def run(self, dataset, batch_size, epochs=2):
+        config = Config()
+        device = config.device()
+
+
+        for model, optim in self:
+
+            run_name = config.run_id_string(model)
+            model.metadata['run_name'] = run_name
+            model.metadata['run_url'] = config.run_url_link(model)
+            model.metadata['git_commit_hash'] = config.GIT_COMMIT
+            model.metadata['dataset'] = dataset.root
+            tb = TensorBoard(config.tb_run_dir(model))
+            tb.register(model)
+            if 'tb_global_step' in model.metadata:
+                tb.global_step = model.metadata['tb_global_step']
+
+            esup = ElasticSearchUpdater()
+            esup.register(model)
+
+            for epoch in tqdm(range(epochs)):
+                model.train_model(dataset, batch_size=batch_size, device=device, optimizer=optim)
+
+                losses = model.test_model(dataset, batch_size=batch_size, device=device)
+
+                l = torch.Tensor(losses)
+
+                ave_test_loss = l.mean().item()
+                import math
+                if not math.isnan(ave_test_loss):
+                    model.metadata['ave_test_loss'] = ave_test_loss
+
+                if 'epoch' not in model.metadata:
+                    model.metadata['epoch'] = 1
+                else:
+                    model.metadata['epoch'] += 1
+                model.metadata['tb_global_step'] = tb.global_step
+                model.save(data_dir=config.DATA_PATH)
+
+
+class ModelFactoryRunner(Runner):
     def __init__(self, model_type):
         self.model_type = model_type
         self.model_args = []
@@ -117,7 +163,7 @@ class ModelFactoryIterator:
         else:
             raise StopIteration()
 
-class OneShotLoader:
+class OneShotRunner(Runner):
     def __init__(self, model, optimizer=None):
         self.model = model
         self.optimizer = optimizer
@@ -138,42 +184,3 @@ class OneShotLoader:
             return self.model, optim
 
 
-def run(model_factory, dataset_path, epochs):
-    jenkins_config = Config()
-    device = jenkins_config.device()
-
-    dataset = jenkins_config.dataset(dataset_path)
-
-    for model, optim in model_factory:
-
-        run_name = jenkins_config.run_id_string(model)
-        model.metadata['run_name'] = run_name
-        model.metadata['run_url'] = jenkins_config.run_url_link(model)
-        model.metadata['git_commit_hash'] = jenkins_config.GIT_COMMIT
-        model.metadata['dataset'] = dataset_path
-        tb = TensorBoard(jenkins_config.tb_run_dir(model))
-        tb.register(model)
-        if 'tb_global_step' in model.metadata:
-            tb.global_step = model.metadata['tb_global_step']
-
-        esup = ElasticSearchUpdater()
-        esup.register(model)
-
-        for epoch in tqdm(range(epochs)):
-            model.train_model(dataset, 24, device, optimizer=optim)
-
-            losses = model.test_model(dataset, 24, device)
-
-            l = torch.Tensor(losses)
-
-            ave_test_loss = l.mean().item()
-            import math
-            if not math.isnan(ave_test_loss):
-                model.metadata['ave_test_loss'] = ave_test_loss
-
-            if 'epoch' not in model.metadata:
-                model.metadata['epoch'] = 1
-            else:
-                model.metadata['epoch'] += 1
-            model.metadata['tb_global_step'] = tb.global_step
-            model.save(data_dir=jenkins_config.DATA_PATH)

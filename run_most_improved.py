@@ -43,6 +43,6 @@ if __name__ == '__main__':
     mental.Storeable.update_metadata(filename, metadata, jc.DATA_PATH)
 
     """ train it for 5 epochs"""
-    most_improved = mental.train.OneShotLoader(model)
+    most_improved = mental.train.OneShotRunner(model)
     mental.train.run(most_improved, 'spaceinvaders/images/dev', 5)
 
