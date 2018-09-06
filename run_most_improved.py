@@ -35,10 +35,10 @@ if __name__ == '__main__':
     filename = selected_model['filename']
     model = mental.Storeable.load(filename, jc.DATA_PATH)
     metadata = dict(model.metadata)
-    if 'reloaded' in model.metadata:
-        metadata['reloaded'] += 1
+    if 'reloads' in model.metadata:
+        metadata['reloads'] += 1
     else:
-        metadata['reloaded'] = 1
+        metadata['reloads'] = 1
     mental.Storeable.update_metadata(filename, metadata, jc.DATA_PATH)
 
     """ train it for 5 epochs"""
