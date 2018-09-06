@@ -32,9 +32,8 @@ if __name__ == '__main__':
 
     """ Load model from disk and flag it as reloaded """
     reloads = selected_model['reloads'] if 'reloads' in selected_model else 0
-    log.info('most improved was {} which improved by {} and has {} reloads'.format(selected_model['guid'],
-                                                                                   most_improved,
-                                                                                   reloads))
+    log.info('most improved was {} {} which improved by {} and has {} reloads'.format(selected_model['guid'], \
+                                                        selected_model['classname'], most_improved, reloads))
     filename = selected_model['filename']
     log.debug('loading {} model {}'.format(filename, selected_model['classname']))
     model = mental.Storeable.load(filename, jc.DATA_PATH)
