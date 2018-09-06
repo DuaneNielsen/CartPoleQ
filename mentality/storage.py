@@ -6,7 +6,9 @@ import hashlib
 import unicodedata
 import re
 from mentality import Observable
+import logging
 
+log = logging.getLogger('Storage')
 
 def slugify(value, allow_unicode=False):
     """
@@ -84,6 +86,7 @@ class Storeable(Observable):
     """ initializes a fresh model from disk with weights
     """
     def __setstate__(self, state):
+        log.debug(state)
         self.__init__(*state[1])
         self.metadata = state[0]
         self.load_state_dict(state[2])
@@ -119,8 +122,16 @@ class Storeable(Observable):
     @staticmethod
     def load(filename, data_dir=None):
         with Storeable.fn(filename, data_dir).open('rb') as f:
-            _ =  pickle.load(f)
-            return pickle.load(f)
+            try:
+                _ =  pickle.load(f)
+                model =  pickle.load(f)
+            except Exception as e:
+                message = "got exception when loading {} from {}".format(filename, data_dir)
+                log.error(message)
+                log.error(e)
+                raise
+            return model
+
 
     """ Load metadata only
     """
@@ -132,6 +143,7 @@ class Storeable(Observable):
     @staticmethod
     def update_metadata(filename, metadata_dict, data_dir=None):
         """ Load model from disk and flag it as reloaded """
+        assert type(metadata_dict) is dict
         model = Storeable.load(filename, data_dir)
         model.metadata = metadata_dict
         model.save(filename, data_dir)

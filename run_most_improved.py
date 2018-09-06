@@ -46,5 +46,5 @@ if __name__ == '__main__':
 
     """ train it for 5 epochs"""
     most_improved = mental.train.OneShotLoader(model)
-    mental.train.run(most_improved, 'spaceinvaders/images/raw', 5)
+    mental.train.run(most_improved, 'spaceinvaders/images/dev', 5)
 

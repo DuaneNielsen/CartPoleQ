@@ -46,7 +46,6 @@ class JenkinsConfig:
 
     def dataset(self, datapath):
         datadir = Path(self.DATA_PATH).joinpath(datapath)
-        print (Path(self.DATA_PATH))
         dataset = torchvision.datasets.ImageFolder(
             root=datadir.absolute(),
             transform=TVT.Compose([TVT.ToTensor()])
