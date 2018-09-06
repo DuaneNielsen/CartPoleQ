@@ -256,7 +256,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
 """
 input_shape is a tuple of (height,width)
 """
-class ConvVAEFixed(BaseVAE, Storeable, MSELoss):
+class ConvVAEFixed(Storeable, BaseVAE, MSELoss):
     def __init__(self, input_shape, first_kernel=5, first_stride=2, second_kernel=5, second_stride=2):
         self.input_shape = input_shape
         encoder = self.Encoder(input_shape, first_kernel, first_stride, second_kernel, second_stride)
