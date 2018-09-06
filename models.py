@@ -228,6 +228,7 @@ class BaseVAE(nn.Module, Dispatcher, Observable, Trainable):
 
         if mu.shape[1] == 3 or mu.shape[1] == 1:
             self.updateObserversWithImage('z', mu[0].data)
+        self.metadata['z_size'] = mu[0].data.numel()
 
         if len(encoded) > 2:
             indices = encoded[2]

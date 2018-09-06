@@ -55,6 +55,7 @@ class Storeable(Observable):
         self.args = args
         self.metadata = {}
         self.metadata['guid'] = self.guid()
+        self.metadata['class_guid'] = self.class_guid()
         self.metadata['classname'] = type(self).__name__
         self.metadata['args'] = self.repr_string
         self.metadata['repr'] = repr(self)
@@ -65,9 +66,16 @@ class Storeable(Observable):
         return self.repr_string
 
 
-    """computes a unique GUID for each model/args pair
+    """computes a unique GUID for each model/args instance
     """
     def guid(self):
+        import random, string
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
+
+    """computes a unique GUID for each model/args pair
+    """
+    def class_guid(self):
+        import random
         md5 = hashlib.md5()
         md5.update(self.repr_string.encode('utf8'))
         return md5.digest().hex()
@@ -111,6 +119,7 @@ class Storeable(Observable):
         self.metadata['filename'] = path.name
         from datetime import datetime
         self.metadata['timestamp'] = datetime.utcnow()
+        self.metadata['parameters'] = sum(p.numel() for p in self.parameters() if p.requires_grad)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('wb') as f:
             metadata, args, state_dict = self.__getstate__()

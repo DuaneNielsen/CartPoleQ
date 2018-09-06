@@ -4,10 +4,11 @@ import torch
 import torchvision
 from torchvision import transforms as TVT
 from pathlib import Path
+import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
 
-class JenkinsConfig:
+class Config:
     def __init__(self):
         # environment variables
         self.BUILD_TAG = os.environ.get('BUILD_TAG', 'build_tag').replace('"', '')
@@ -15,8 +16,22 @@ class JenkinsConfig:
         self.DATA_PATH = os.environ.get('DATA_PATH', 'c:\data').replace('"', '')
         self.TORCH_DEVICE = os.environ.get('TORCH_DEVICE', 'cuda').replace('"', '')
 
+        self.configpath = Path(self.DATA_PATH) / 'config.json'
+        if self.configpath.exists():
+            self.config = Config.load(self.configpath.absolute())
+        else:
+            self.config = {}
+            self.config['run_id'] = 0
+            self.save(self.configpath.absolute())
+
+        logfile = self.getLogPath('most_improved.log')
+        logging.basicConfig(filename=logfile.absolute())
+
+    def rolling_run_number(self):
+        return "{0:0=3d}".format(self.config['run_id']%1000)
+
     def run_id_string(self, model):
-        return 'runs/' + model.metadata['slug']
+        return 'runs/run' + self.rolling_run_number() + '/' +  model.metadata['slug']
 
     def convert_to_url(self, run, host=None, port='6006'):
         if host is None:
@@ -56,3 +71,20 @@ class JenkinsConfig:
         logfile = Path(self.DATA_PATH) / 'logs' / name
         logfile.parent.mkdir(parents=True, exist_ok=True)
         return logfile
+
+    def update(self, key, value):
+        self.config[key] = value
+        self.save(self.configpath)
+
+    def increment(self, key):
+        self.config[key] += 1
+        self.save(self.configpath)
+
+    def save(self, filename):
+        with open(filename, 'w') as configfile:
+            json.dump(self.config, fp=configfile, indent=2)
+
+    @staticmethod
+    def load(filename):
+        with open(filename, 'r') as configfile:
+            return json.load(fp=configfile)

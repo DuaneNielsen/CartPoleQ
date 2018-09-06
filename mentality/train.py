@@ -1,6 +1,6 @@
 import torch
 import torch.utils.data as du
-from mentality import JenkinsConfig, ElasticSearchUpdater, TensorBoard, TensorBoardObservable
+from mentality import Config, ElasticSearchUpdater, TensorBoard, TensorBoardObservable
 import time
 from abc import ABC, abstractmethod
 from tqdm import tqdm
@@ -139,7 +139,7 @@ class OneShotLoader:
 
 
 def run(model_factory, dataset_path, epochs):
-    jenkins_config = JenkinsConfig()
+    jenkins_config = Config()
     device = jenkins_config.device()
 
     dataset = jenkins_config.dataset(dataset_path)

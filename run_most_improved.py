@@ -3,9 +3,7 @@ import logging
 
 if __name__ == '__main__':
 
-    jc = mental.JenkinsConfig()
-    logfile = jc.getLogPath('most_improved.log')
-    logging.basicConfig(filename=logfile.absolute())
+    jc = mental.Config()
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
     mdb = mental.ModelDb(jc.DATA_PATH)

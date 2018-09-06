@@ -1,4 +1,4 @@
-from .jenkins import JenkinsConfig
+from .config import Config
 from .elastic import ElasticSearchUpdater
 from .observe import Dispatcher, View, Observable, OpenCV, TensorBoardObservable, TensorBoard, ImageFileWriter, \
     ImageVideoWriter

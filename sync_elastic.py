@@ -1,6 +1,6 @@
-from mentality import JenkinsConfig, ModelDb
+from mentality import Config, ModelDb
 
 
-jc =JenkinsConfig()
+jc =Config()
 mdb = ModelDb(jc.DATA_PATH)
-mdb.sync_to_elastic() 
+mdb.sync_to_elastic()
