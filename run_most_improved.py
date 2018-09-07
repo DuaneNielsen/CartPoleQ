@@ -3,8 +3,15 @@ import logging
 from pathlib import Path
 import torchvision
 import torchvision.transforms as TVT
+import argparse
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset-dir', help='the dataset eg: spaceinvaders/images/dev', default='spaceinvaders/images/dev')
+    parser.add_argument('--epochs', help='number of epochs per model', default=2, type=int)
+    parser.add_argument('--reloads', help='max numer of reloads per model', default=3, type=int)
+    args = parser.parse_args()
 
     jc = mental.Config()
     log = logging.getLogger(__name__)
@@ -15,7 +22,7 @@ if __name__ == '__main__':
     selected_model = None
 
     config = mental.Config()
-    datadir = Path(config.DATA_PATH) / 'spaceinvaders/images/dev'
+    datadir = Path(config.DATA_PATH) / args.dataset_dir
     dataset = torchvision.datasets.ImageFolder(
         root=datadir.absolute(),
         transform=TVT.Compose([TVT.ToTensor()])
@@ -28,7 +35,7 @@ if __name__ == '__main__':
             metadata = top2[guid][0][1]
             reloads = metadata['reloads'] if 'reloads' in metadata else 0
             log.debug('{} {} improved by {}'.format(guid, metadata['classname'], improvement))
-            if reloads < 2 and improvement > most_improved:
+            if reloads < args.reloads and improvement > most_improved:
                 selected_model = metadata
                 most_improved = improvement
             elif improvement > most_improved:
@@ -54,4 +61,4 @@ if __name__ == '__main__':
 
     """ train it for 5 epochs"""
     most_improved = mental.train.OneShotRunner(model)
-    most_improved.run(dataset, batch_size=24,  epochs=5)
+    most_improved.run(dataset, batch_size=24,  epochs=args.epochs)

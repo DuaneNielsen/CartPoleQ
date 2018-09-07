@@ -3,19 +3,25 @@ import models
 from pathlib import Path
 import torchvision
 import torchvision.transforms as TVT
+import argparse
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset-dir', help='the dataset eg: spaceinvaders/images/dev', default='spaceinvaders/images/dev')
+    parser.add_argument('--epochs', help='number of epochs per model', default=2, type=int)
+    args = parser.parse_args()
 
     config = Config()
     config.increment('run_id')
 
-    datadir = Path(config.DATA_PATH) / 'spaceinvaders/images/dev'
+    datadir = Path(config.DATA_PATH) / args.dataset_dir
     DATASET = torchvision.datasets.ImageFolder(
         root=datadir.absolute(),
         transform=TVT.Compose([TVT.ToTensor()])
     )
 
-    EPOCHS = 2
+    EPOCHS = args.epochs
 
     fac = OneShotRunner(models.AtariConv_v5())
     fac.run(DATASET, batch_size=24, epochs=EPOCHS)
